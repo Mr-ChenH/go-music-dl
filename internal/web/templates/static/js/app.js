@@ -1286,16 +1286,16 @@ function shouldHandleInternalNavigation(link, event) {
   );
 }
 
-function syncRightToolbar(nextDoc, currentContainer) {
-  const currentToolbar = document.querySelector(".right-toolbar");
-  const nextToolbar = nextDoc.querySelector(".right-toolbar");
+function syncReactNavigationMount(nextDoc, currentContainer) {
+  const currentToolbar = document.querySelector("#react-navigation-root");
+  const nextToolbar = nextDoc.querySelector("#react-navigation-root");
 
   if (!nextToolbar) {
     if (currentToolbar) currentToolbar.remove();
     return;
   }
 
-  // 分页区由服务端按当前结果页生成，Ajax 导航时必须整体替换，避免保留上一页的按钮状态。
+  // Replace server-provided navigation metadata before remounting React.
   if (currentToolbar) {
     currentToolbar.replaceWith(nextToolbar.cloneNode(true));
   } else if (currentContainer) {
@@ -1379,7 +1379,7 @@ async function navigateTo(url, options = {}) {
     }
 
     currentContainer.innerHTML = nextContainer.innerHTML;
-    syncRightToolbar(nextDoc, currentContainer);
+    syncReactNavigationMount(nextDoc, currentContainer);
     defaultDocumentTitle = nextDoc.title || defaultDocumentTitle;
     document.title = defaultDocumentTitle;
 
@@ -1403,7 +1403,6 @@ async function navigateTo(url, options = {}) {
     }
 
     initializePageContent(currentContainer);
-    updateFloatPageNav();
 
     if (options.scrollToResults) {
       scrollToSearchResults();
@@ -1594,7 +1593,6 @@ document.addEventListener("DOMContentLoaded", function () {
   fetchWebSettings().finally(() => maybeAutoCheckUpdate());
   bindPageNavigationEvents();
   initializePageContent(document);
-  updateFloatPageNav();
   // 直接打开搜索结果链接，或 SPA 失败回退到整页加载时，同样把结果滚入视口。
   // 仅在 URL 带搜索词时触发，普通页面加载不受影响。
   if (new URLSearchParams(window.location.search).get("q")) {
@@ -2257,7 +2255,6 @@ async function loadLocalMusicPage(page = 1, options = {}) {
     }
 
     renderLocalMusicPagePagination(targetPage, totalPages);
-    updateFloatPageNav();
     refreshDownloadLinks(list);
     bindSongSortControls(list);
     bindSongCardCovers(list);
@@ -3989,160 +3986,6 @@ async function saveCookies() {
   } catch (error) {
     alert(error.message || "保存失败，请稍后重试");
   }
-}
-
-window.addEventListener("scroll", () => {
-  const topBtn = document.getElementById("back-to-top");
-  const bottomBtn = document.getElementById("back-to-bottom");
-  if (topBtn) {
-    if (window.scrollY > 300) {
-      topBtn.classList.add("show");
-    } else {
-      topBtn.classList.remove("show");
-    }
-  }
-  if (bottomBtn) {
-    if (window.scrollY > 300) {
-      bottomBtn.classList.add("show");
-    } else {
-      bottomBtn.classList.remove("show");
-    }
-  }
-});
-
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function scrollToBottom() {
-  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-}
-
-// ==========================================
-// 浮动翻页键
-// ==========================================
-
-function updateFloatPageNav() {
-  const numEl = document.getElementById("float-page-num");
-  if (!numEl) return;
-
-  // 本地音乐页
-  if (isLocalMusicPageActive()) {
-    const bar = document.getElementById("localMusicPagePagination");
-    if (!bar) {
-      setFloatPageNumber(numEl, 1);
-      return;
-    }
-    const cur = parseInt(bar.dataset.currentPage, 10);
-    if (Number.isFinite(cur)) setFloatPageNumber(numEl, cur);
-    return;
-  }
-
-  const { current } = getRenderedSearchPageInfo();
-  setFloatPageNumber(numEl, current);
-}
-
-function setFloatPageNumber(element, page) {
-  if (element.tagName === "INPUT") {
-    element.value = String(page);
-  } else {
-    element.textContent = String(page);
-  }
-}
-
-function getRenderedSearchPageInfo() {
-  const fallback = parseInt(new URLSearchParams(window.location.search).get("page"), 10) || 1;
-  const summary = document.querySelector(".page-summary");
-  const match = summary ? summary.textContent.match(/(\d+)\s*\/\s*(\d+)/) : null;
-  if (!match) return { current: fallback, total: null };
-  return {
-    current: parseInt(match[1], 10) || fallback,
-    total: parseInt(match[2], 10) || null,
-  };
-}
-
-function floatPageUp() {
-  if (isLocalMusicPageActive()) {
-    const bar = document.getElementById("localMusicPagePagination");
-    if (!bar) return;
-    const cur = parseInt(bar.dataset.currentPage, 10);
-    if (cur > 1) goToPage(cur - 1);
-  } else {
-    const { current } = getRenderedSearchPageInfo();
-    if (current > 1) goToPage(current - 1);
-  }
-}
-
-function floatPageDown() {
-  if (isLocalMusicPageActive()) {
-    const bar = document.getElementById("localMusicPagePagination");
-    if (!bar) return;
-    const cur = parseInt(bar.dataset.currentPage, 10);
-    const total = parseInt(bar.dataset.totalPages, 10);
-    if (cur < total) goToPage(cur + 1);
-  } else {
-    const { current, total } = getRenderedSearchPageInfo();
-    if (total && current < total) goToPage(current + 1);
-  }
-}
-
-// 点击页数 → 输入框 → Enter/blur 跳转
-function floatPageNumClick() {
-  const numEl = document.getElementById("float-page-num");
-  if (!numEl) return;
-  if (isLocalMusicPageActive()) {
-    if (!document.getElementById("localMusicPagePagination")) return;
-  } else if (!getRenderedSearchPageInfo().total) {
-    return;
-  }
-  const currentVal = numEl.textContent.trim();
-  // 如果已经是输入框则忽略
-  if (numEl.tagName === "INPUT") return;
-
-  const input = document.createElement("input");
-  input.type = "number";
-  input.min = "1";
-  input.value = currentVal;
-  input.className = numEl.className;
-  input.id = numEl.id;
-  input.style.width = "40px";
-  input.style.height = "28px";
-  input.style.textAlign = "center";
-  input.style.fontSize = "13px";
-  input.style.fontWeight = "700";
-  input.style.color = "#0f6cbd";
-  input.style.border = "2px solid #0f6cbd";
-  input.style.borderRadius = "6px";
-  input.style.outline = "none";
-  input.style.background = "white";
-
-  let submitted = false;
-  const restore = () => {
-    if (input.parentNode) input.parentNode.replaceChild(numEl, input);
-  };
-  const jump = () => {
-    if (submitted) return;
-    submitted = true;
-    const val = parseInt(input.value, 10);
-    restore();
-    if (Number.isFinite(val) && val > 0) goToPage(val);
-  };
-
-  input.onkeydown = function(e) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      jump();
-    }
-    if (e.key === "Escape") {
-      submitted = true;
-      restore();
-    }
-  };
-  input.onblur = jump;
-
-  numEl.parentNode.replaceChild(input, numEl);
-  input.focus();
-  input.select();
 }
 
 let defaultDocumentTitle = document.title;

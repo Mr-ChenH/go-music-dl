@@ -6,7 +6,7 @@ body[data-workspace-view="player"] { padding-bottom: 24px; }
   --music-accent-hover: var(--fluent-blue-hover);
   position: relative;
   isolation: isolate;
-  height: calc(100vh - 152px);
+  height: calc(100vh - 134px);
   min-height: 520px;
   max-height: 820px;
   padding: 0;
@@ -223,39 +223,9 @@ body[data-workspace-view="player"] { padding-bottom: 24px; }
 .queue-panel button small,
 .queue-panel button time { color: var(--fluent-muted); font-size: 10px; }
 
-/* Lyrics and queue share one focused side pane. */
+/* Queue uses the full side pane. */
 .now-playing-side { display: flex; flex-direction: column; }
-.player-side-tabs {
-  flex: 0 0 54px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  padding: 8px;
-  border-bottom: 1px solid var(--fluent-stroke);
-  background: rgba(255, 255, 255, 0.46);
-}
-.player-side-tabs button {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--fluent-muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-}
-.player-side-tabs button:hover { background: rgba(15, 108, 189, 0.07); color: var(--fluent-text); }
-.player-side-tabs button.is-active { background: #fff; color: var(--fluent-blue); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1); }
-.player-side-tabs svg { width: 17px; height: 17px; }
-.player-side-tabs button span { min-width: 18px; padding: 1px 5px; border-radius: 8px; background: #e8e8e8; color: var(--fluent-muted); font-size: 9px; }
-.player-side-tabs button.is-active span { background: #ebf3fc; color: var(--fluent-blue); }
 .player-side-content { min-height: 0; flex: 1; border: 0; }
-.player-side-content.lyrics-panel > div { overflow-y: auto; }
 .player-side-content.queue-panel > div { max-height: none; }
 
 @media (max-width: 1120px) and (min-width: 769px) {

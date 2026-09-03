@@ -57,14 +57,19 @@ func TestBatchDownloadUsesCompactRecordBackedFeedback(t *testing.T) {
 	if strings.Contains(indexHTML, `id="download-panel"`) {
 		t.Fatal("index.html should not render the large batch download panel")
 	}
-	for _, want := range []string{
-		`id="download-records-button"`,
-		`class="rt-btn rt-btn-download-records"`,
-		`aria-label="下载记录"`,
-	} {
-		if !strings.Contains(indexHTML, want) {
-			t.Fatalf("download records entry missing %q", want)
-		}
+	if !strings.Contains(indexHTML, `id="react-navigation-root"`) {
+		t.Fatal("index.html should expose the React navigation mount")
+	}
+	if strings.Contains(indexHTML, `class="rt-btn rt-btn-download-records"`) {
+		t.Fatal("index.html should not retain the legacy download records toolbar button")
+	}
+
+	reactContent, err := templateFS.ReadFile("templates/static/react/react-app.js")
+	if err != nil {
+		t.Fatalf("read react-app.js: %v", err)
+	}
+	if !strings.Contains(string(reactContent), `download-records-button`) {
+		t.Fatal("React navigation should retain the download records entry")
 	}
 
 	styleContent, err := templateFS.ReadFile("templates/static/css/style.css")

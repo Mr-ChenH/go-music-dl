@@ -552,42 +552,11 @@ body.batch-mode .song-card { padding-left: 10px; }
 
 .no-results { text-align: center; padding: 60px; color: var(--text-sub); }
 
-/* 右侧统一工具栏 */
-.right-toolbar {
-    position: fixed;
-    right: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    z-index: 10001;
-}
-
-/* 歌曲详情/生成视频全屏弹窗打开时，隐藏背后的右侧工具栏与底部播放条 */
-body.vg-open .right-toolbar,
+/* Hide navigation and playback controls behind the full-screen video editor. */
+body.vg-open .app-sidebar,
 body.vg-open .aplayer.aplayer-fixed {
     display: none !important;
 }
-.rt-btn {
-    width: 36px;
-    height: 36px;
-    background: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-    color: var(--text-sub);
-    font-size: 15px;
-    transition: 0.2s;
-    border: none;
-    padding: 0;
-}
-.rt-btn:hover { color: #0f6cbd; transform: scale(1.1); }
-.rt-btn:active { transform: scale(0.92); }
 .rt-btn-download-records { position: relative; }
 .rt-download-records-dot {
     position: absolute;
@@ -626,31 +595,7 @@ body.vg-open .aplayer.aplayer-fixed {
 @media (prefers-reduced-motion: reduce) {
     .rt-btn-download-records.is-downloading .rt-download-records-dot { animation: none; }
 }
-.rt-separator {
-    width: 20px;
-    height: 1px;
-    background: #d1d5db;
-    margin: 2px 0;
-}
-.rt-page-num {
-    width: 36px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 700;
-    color: #0f6cbd;
-    background: rgba(255,255,255,0.9);
-    border-radius: 4px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-    cursor: pointer;
-    user-select: none;
-}
-.rt-page-num:hover { background: #ebf3fc; }
 
-.auth-float { margin: 0; display: flex; align-items: center; justify-content: center; }
-.rt-form { background: transparent !important; box-shadow: none !important; border-radius: 0 !important; }
 #auth-float-form button { border: none; border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; font-size: 15px; }
 #auth-float-form.auth-login button { background: #ebf3fc; color: #115ea3; border: 1px solid rgba(17, 94, 163, 0.3); }
 #auth-float-form.auth-logout button { background: #fff1f2; color: #e11d48; border: 1px solid rgba(225, 29, 72, 0.3); }
@@ -1243,17 +1188,6 @@ body.vg-open .aplayer.aplayer-fixed {
 .collection-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 10px; transition: all 0.2s; background: #faf8f8; cursor: pointer;}
 .collection-item:hover { border-color: #0f6cbd; box-shadow: 0 2px 8px rgba(15, 108, 189, 0.15); }
 
-/* 返回顶部按钮 */
-
-
-/* 🌟 Sakana 蒜苗看板娘容器控制 - 移到右侧 */
-
-    background: #0f6cbd;
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(15, 108, 189, 0.3);
-}
-
 .aplayer.aplayer-fixed { z-index: 10000 !important; }
 
 .aplayer.aplayer-fixed .playmode-toggle-btn {
@@ -1273,24 +1207,6 @@ body.vg-open .aplayer.aplayer-fixed {
     z-index: 2;
     box-shadow: 0 2px 8px rgba(15, 108, 189, 0.3);
     transition: background 0.2s, transform 0.15s;
-}
-
-/* 🌟 Sakana 蒜苗看板娘 - 左下角 */
-.sakana-container {
-    position: fixed;
-    bottom: 90px;
-    right: 14px;
-    z-index: 998;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    transform-origin: left bottom;
-    transform: scale(0.85);
-}
-
-/* 手机端隐藏 */
-@media (max-width: 768px) {
-    .sakana-container { display: none !important; }
 }
 
 .aplayer.aplayer-fixed .playmode-toggle-btn:hover,

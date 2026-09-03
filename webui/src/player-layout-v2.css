@@ -153,7 +153,7 @@
 }
 
 @media (max-width: 900px) and (min-width: 769px) {
-  .now-playing-view { height: calc(100vh - 152px); min-height: 520px; max-height: none; }
+  .now-playing-view { height: calc(100vh - 134px); min-height: 520px; max-height: none; }
   .now-playing-layout { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 260px; }
   .now-playing-main { min-height: 0; border-right: 1px solid var(--fluent-stroke); border-bottom: 0; }
   .now-playing-feature { grid-template-columns: 190px minmax(0, 1fr); padding: 18px; }

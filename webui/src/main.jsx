@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { FluentProvider, webLightTheme } from "@fluentui/react-components";
 import {
-  ChevronDown16Regular,
   ChevronUp16Regular,
   Clock24Regular,
   Dismiss20Regular,
@@ -244,7 +243,6 @@ function AppNavigation({ node }) {
     openWorkspaceView(view);
   };
   const isPath = (...parts) => parts.some((part) => path.includes(part));
-  const showPages = data.showPages === "true";
 
   const accountButton = (
     <form id="auth-float-form" className="nav-account-form" action={`${data.root}/logout`} method="post" title="登录">
@@ -290,14 +288,6 @@ function AppNavigation({ node }) {
 
       <div className="sidebar-spacer" />
 
-      {showPages && !workspaceView ? (
-        <div className="sidebar-pagination" aria-label="页面导航">
-          <button type="button" onClick={go("floatPageUp")} title="上一页"><ChevronUp16Regular /></button>
-          <button type="button" className="rt-page-num" id="float-page-num" onClick={go("floatPageNumClick")}>1</button>
-          <button type="button" onClick={go("floatPageDown")} title="下一页"><ChevronDown16Regular /></button>
-        </div>
-      ) : null}
-
       <div className="desktop-navigation sidebar-system-actions">
         <NavButton label="系统设置" icon={Settings24Regular} onClick={go("openSystemConfig")} />
         {accountButton}
@@ -325,12 +315,6 @@ function AppNavigation({ node }) {
             <NavButton label="系统设置" icon={Settings24Regular} onClick={go("openSystemConfig")} />
             <NavButton label="账户" icon={Person24Regular} onClick={go("openSystemConfig")} />
           </div>
-          {showPages && !workspaceView ? (
-            <div className="mobile-page-actions">
-              <button type="button" onClick={go("floatPageUp")}><ChevronUp16Regular /> 上一页</button>
-              <button type="button" onClick={go("floatPageDown")}>下一页 <ChevronDown16Regular /></button>
-            </div>
-          ) : null}
         </div>
       ) : null}
     </>
@@ -351,7 +335,7 @@ function mountNode(node, Component) {
 window.mountMusicDlReact = function mountMusicDlReact(scope = document) {
   const searchRoot = scope.querySelector?.("#react-search-root");
   mountNode(searchRoot, SearchConsole);
-  const toolbar = document.querySelector("#react-toolbar-root");
+  const toolbar = document.querySelector("#react-navigation-root");
   mountNode(toolbar, AppNavigation);
 };
 

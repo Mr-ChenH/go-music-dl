@@ -1,18 +1,18 @@
 /* First-class activity and playback workspaces. */
 .workspace-page-header {
-  min-height: 76px;
+  min-height: 60px;
   margin-bottom: 12px;
-  padding: 14px 16px;
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.88);
-  outline: 1px solid var(--fluent-stroke);
-  border-radius: 8px;
-  background: var(--fluent-surface);
-  backdrop-filter: blur(28px) saturate(135%);
-  box-shadow: var(--fluent-shadow);
+  padding: 2px 2px 10px;
+  align-items: flex-end;
+  border: 0;
+  outline: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
 }
 
-.workspace-status { margin-top: 0; }
+.workspace-status { margin: 0 2px 7px 0; }
 body.react-workspace-page-active .container > #react-search-root ~ * { display: none !important; }
 body[data-workspace-view="player"] .aplayer.aplayer-fixed { display: none !important; }
 
@@ -231,8 +231,8 @@ body.player-lyrics-unavailable .aplayer.aplayer-fixed .aplayer-lrc { display: no
   .mini-player { left: 10px; right: 10px; bottom: max(10px, env(safe-area-inset-bottom)); width: auto; height: 66px; }
   .mini-player-track { grid-template-columns: 44px minmax(0, 1fr); }
   .mini-player-cover { width: 44px; height: 44px; }
-  body[data-workspace-view="player"] .right-toolbar.app-sidebar { bottom: max(10px, env(safe-area-inset-bottom)); }
-  .workspace-page-header { min-height: 66px; margin-bottom: 10px; padding: 11px 13px; border-radius: 8px; }
+  body[data-workspace-view="player"] .app-sidebar { bottom: max(10px, env(safe-area-inset-bottom)); }
+  .workspace-page-header { min-height: 52px; margin-bottom: 8px; padding: 0 2px 8px; border-radius: 0; }
   .workspace-page-header h1 { font-size: 22px; }
   .workspace-view { min-height: 360px; }
   .workspace-view-toolbar { align-items: flex-start; padding: 12px; flex-direction: column; gap: 11px; }

@@ -13,36 +13,14 @@
     
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/aplayer/dist/APlayer.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sakana-widget@2.7.1/lib/sakana.min.css"/>
 </head>
 <body>
 
 <!-- React renders the Fluent command rail while the server keeps page-state metadata. -->
-<div id="react-toolbar-root" class="right-toolbar app-sidebar"
+<div id="react-navigation-root" class="app-sidebar"
      data-root="{{.Root}}"
-     data-current-path="{{.CurrentPath}}"
-     data-show-pages="{{if or (gt .TotalPages 1) (eq .SearchType "local_music")}}true{{else}}false{{end}}">
+     data-current-path="{{.CurrentPath}}">
 </div>
-<noscript>
-    <div class="right-toolbar">
-        <button type="button" class="rt-btn" onclick="openSystemConfig()" title="系统配置"><i class="fa-solid fa-gear"></i></button>
-        <form id="auth-float-form" class="rt-form" action="{{.Root}}/logout" method="post" title="登录">
-            <button id="auth-float-button" type="submit"><i id="auth-float-icon" class="fa-solid fa-right-to-bracket"></i></button>
-        </form>
-        <button type="button" class="rt-btn" onclick="openLocalMusicPage()" title="本地音乐"><i class="fa-solid fa-folder-plus"></i></button>
-        <button type="button" id="download-records-button" class="rt-btn rt-btn-download-records" onclick="openDownloadRecordsModal()" title="下载记录" aria-label="下载记录"><i class="fa-solid fa-clock-rotate-left"></i></button>
-        <button type="button" class="rt-btn" onclick="openPlaybackHistoryModal()" title="播放历史"><i class="fa-solid fa-clock"></i></button>
-        {{if or (gt .TotalPages 1) (eq .SearchType "local_music")}}
-        <div class="rt-separator"></div>
-        <button type="button" class="rt-btn" onclick="floatPageUp()" title="上一页"><i class="fa-solid fa-chevron-up"></i></button>
-        <button type="button" class="rt-page-num" id="float-page-num" onclick="floatPageNumClick()">1</button>
-        <button type="button" class="rt-btn" onclick="floatPageDown()" title="下一页"><i class="fa-solid fa-chevron-down"></i></button>
-        {{end}}
-        <div class="rt-separator"></div>
-        <button type="button" class="rt-btn" onclick="scrollToTop()" title="回到顶部"><i class="fa-solid fa-arrow-up"></i></button>
-        <button type="button" class="rt-btn" onclick="scrollToBottom()" title="回到底部"><i class="fa-solid fa-arrow-down"></i></button>
-    </div>
-</noscript>
 
 <div class="container">
     {{template "search_box" .}}
@@ -63,25 +41,12 @@
 
 <script>
     window.API_ROOT = "{{.Root}}";
-    window.sakanaInstance = null;
-
-    function initSakanaWidget() {
-        if (window.innerWidth > 768) {
-            window.sakanaInstance = new SakanaWidget().mount('#sakana-widget');
-        }
-    }
 </script>
 
 <script type="module" src="{{.Root}}/react-app.js"></script>
 <script src="{{.Root}}/app.js"></script>
 {{template "videogen_modal" .}}
 <script src="{{.Root}}/videogen.js"></script>
-
-<div id="sakana-container" class="sakana-container">
-    <div id="sakana-widget"></div>
-</div>
-
-<script async onload="initSakanaWidget()" src="https://cdn.jsdelivr.net/npm/sakana-widget@2.7.1/lib/sakana.min.js"></script>
 
 </body>
 </html>

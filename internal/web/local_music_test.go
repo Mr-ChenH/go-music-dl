@@ -364,8 +364,8 @@ func TestManualCollectionLocalSongRendersLocalActionOrder(t *testing.T) {
 	}
 
 	body := rec.Body.String()
-	if !strings.Contains(body, `class="right-toolbar"`) {
-		t.Fatalf("song detail should retain the global right toolbar: %s", body)
+	if !strings.Contains(body, `id="react-navigation-root"`) {
+		t.Fatalf("song detail should retain the React navigation mount: %s", body)
 	}
 	cardStart := strings.Index(body, `data-id="`+localID+`"`)
 	if cardStart < 0 {
@@ -1297,17 +1297,25 @@ func TestLocalMusicClientQueuesPageChangesAndRefreshesAfterDuplicateDeletion(t *
 	}
 }
 
-func TestFloatingPaginationUsesLocalMusicPagePaginationBar(t *testing.T) {
+func TestLocalMusicUsesOnlyContentPagination(t *testing.T) {
 	content, err := templateFS.ReadFile("templates/static/js/app.js")
 	if err != nil {
 		t.Fatalf("read app.js: %v", err)
 	}
 	js := string(content)
-	if strings.Count(js, `getElementById("localMusicPagePagination")`) < 4 {
-		t.Fatal("floating pagination should read the same local music pagination bar that the page renders")
+	if !strings.Contains(js, `bar.id = "localMusicPagePagination"`) {
+		t.Fatal("local music should render its content pagination bar")
 	}
-	if strings.Contains(js, `getElementById("local-music-pagination")`) {
-		t.Fatal("floating pagination should not reference the obsolete local music pagination ID")
+	for _, obsolete := range []string{
+		`getElementById("float-page-num")`,
+		"function updateFloatPageNav()",
+		"function floatPageUp()",
+		"function floatPageDown()",
+		"function floatPageNumClick()",
+	} {
+		if strings.Contains(js, obsolete) {
+			t.Fatalf("app.js should not retain legacy floating pagination %q", obsolete)
+		}
 	}
 }
 

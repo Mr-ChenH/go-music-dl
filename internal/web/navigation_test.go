@@ -69,7 +69,7 @@ func TestRenderIndexPlaylistCardsUseAjaxNavigation(t *testing.T) {
 	}
 }
 
-func TestRemotePlaylistDetailKeepsGlobalRightToolbar(t *testing.T) {
+func TestRemotePlaylistDetailKeepsReactNavigationMount(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
@@ -86,18 +86,15 @@ func TestRemotePlaylistDetailKeepsGlobalRightToolbar(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `class="right-toolbar"`) {
-		t.Fatalf("remote playlist detail should retain the global right toolbar: %s", body)
+	if !strings.Contains(body, `id="react-navigation-root"`) {
+		t.Fatalf("remote playlist detail should retain the React navigation mount: %s", body)
 	}
-	if !strings.Contains(body, `onclick="openSystemConfig()"`) {
-		t.Fatalf("remote playlist detail should retain system settings access: %s", body)
-	}
-	if !strings.Contains(body, `onclick="openPlaybackHistoryModal()"`) {
-		t.Fatalf("remote playlist detail should retain playback history access: %s", body)
+	if !strings.Contains(body, `data-current-path="/music/playlist"`) {
+		t.Fatalf("remote playlist detail should expose its path to React navigation: %s", body)
 	}
 }
 
-func TestRightToolbarPaginationMatchesRenderedPageCount(t *testing.T) {
+func TestIndexDoesNotRenderLegacyGlobalPagination(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	router := gin.New()
@@ -126,8 +123,8 @@ func TestRightToolbarPaginationMatchesRenderedPageCount(t *testing.T) {
 	if manyRec.Code != 200 {
 		t.Fatalf("multi-page status = %d, want 200", manyRec.Code)
 	}
-	if !strings.Contains(manyRec.Body.String(), `id="float-page-num"`) {
-		t.Fatalf("multi-page result should render right pagination: %s", manyRec.Body.String())
+	if strings.Contains(manyRec.Body.String(), `id="float-page-num"`) {
+		t.Fatalf("multi-page result should use content pagination, not legacy global pagination: %s", manyRec.Body.String())
 	}
 }
 
@@ -144,11 +141,11 @@ func TestAppJSIncludesAjaxNavigationEntryPoints(t *testing.T) {
 	if !strings.Contains(js, "function bindPageNavigationEvents()") {
 		t.Fatal("app.js missing bindPageNavigationEvents function")
 	}
-	if !strings.Contains(js, "function syncRightToolbar(nextDoc, currentContainer)") {
-		t.Fatal("app.js missing right toolbar synchronization for AJAX navigation")
+	if !strings.Contains(js, "function syncReactNavigationMount(nextDoc, currentContainer)") {
+		t.Fatal("app.js missing React navigation synchronization for AJAX navigation")
 	}
-	if !strings.Contains(js, "syncRightToolbar(nextDoc, currentContainer);") {
-		t.Fatal("app.js does not synchronize the right toolbar during AJAX navigation")
+	if !strings.Contains(js, "syncReactNavigationMount(nextDoc, currentContainer);") {
+		t.Fatal("app.js does not synchronize React navigation during AJAX navigation")
 	}
 	if !strings.Contains(js, "function handlePaginationShortcut(event)") {
 		t.Fatal("app.js missing pagination shortcut handler")
