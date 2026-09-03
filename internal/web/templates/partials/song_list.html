@@ -4,7 +4,7 @@
     <div class="list-header">
         <div>
             {{ if .ColID }}
-            <span class="result-count" style="font-size: 16px;"><i class="fa-solid fa-folder-open"></i> 正在查看: <span style="color:#10b981; margin-left: 5px;">{{ .ColName }}</span>（共 {{ .TotalCount }} 首）</span>
+            <span class="result-count collection-result-title"><i class="fa-solid fa-folder-open"></i> 正在查看: <span class="collection-result-name">{{ .ColName }}</span>（共 {{ .TotalCount }} 首）</span>
             {{ else if eq .SearchType "local_music" }}
             <span class="result-count"><i class="fa-solid fa-music"></i> 本地音乐（共 <span class="count" id="localMusicPageTotal">{{ .TotalCount }}</span> 首）</span>
             {{ else }}
@@ -112,7 +112,7 @@
         <div class="batch-info">
             <div>
                 <label><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this)"> 全选</label>
-                <span style="margin-left: 5px; color: #718096; font-size:12px;">已选 <span id="selected-count" style="color: #10b981; font-weight: bold;">0</span></span>
+                <span class="batch-selection-summary">已选 <span id="selected-count">0</span></span>
             </div>
             {{ if not $isLocalMusicPage }}
             <button class="btn-pill btn-pill-warn" onclick="selectInvalidSongs()">

@@ -1,0 +1,242 @@
+/* Unified Fluent treatment for server-rendered legacy modules. */
+.modal-overlay { z-index: 12000 !important; }
+.app-toast-container { z-index: 13000; }
+#react-search-root > .fui-FluentProvider { background: transparent; }
+#react-search-root.is-dedicated-workspace ~ .category-panel { margin-top: 0; }
+#react-search-root.is-dedicated-workspace ~ .category-panel > .category-panel-header { display: none; }
+
+@media (max-width: 1000px) and (min-width: 769px) {
+  .search-module-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .search-module-heading .search-type-switch { width: 100%; }
+  .search-module-heading .type-option { flex: 1; }
+}
+
+select {
+  min-height: 36px;
+  padding: 7px 30px 7px 10px;
+  border: 1px solid #8a8886;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: var(--fluent-text);
+}
+
+select:focus {
+  border-color: var(--fluent-blue) !important;
+  box-shadow: 0 0 0 1px rgba(15, 108, 189, 0.12) !important;
+  outline: none;
+}
+
+.collection-result-title { font-size: 16px !important; }
+.collection-result-name { margin-left: 5px; color: var(--fluent-blue); }
+.batch-selection-summary { margin-left: 5px; color: var(--fluent-muted); font-size: 12px; }
+.batch-selection-summary #selected-count { color: var(--fluent-blue); font-weight: 700; }
+
+.local-music-upload-button,
+.song-list-tools-trigger,
+.song-list-tool-action,
+.playback-history-play,
+.utility-modal-page-button,
+.col-action-btn,
+.cookie-qr-btn,
+.btn-save {
+  border-radius: 4px;
+}
+
+.local-music-upload-button.is-file,
+.cookie-qr-btn,
+.btn-save,
+.song-list-tool-action.is-primary {
+  border-color: var(--fluent-blue);
+  background: var(--fluent-blue);
+  color: #fff;
+  box-shadow: none;
+}
+
+.local-music-upload-button.is-file:hover,
+.cookie-qr-btn:hover,
+.btn-save:hover,
+.song-list-tool-action.is-primary:hover {
+  border-color: var(--fluent-blue-hover);
+  background: var(--fluent-blue-hover);
+  color: #fff;
+  transform: none;
+  box-shadow: 0 2px 6px rgba(15, 108, 189, 0.2);
+}
+
+.local-music-upload-button.is-folder,
+.song-list-tools-trigger,
+.playback-history-play,
+.utility-modal-page-button {
+  border-color: rgba(15, 108, 189, 0.28);
+  background: #fff;
+  color: var(--fluent-blue);
+}
+
+.local-music-upload-button.is-folder:hover,
+.song-list-tools-trigger:hover,
+.song-list-tools-trigger[aria-expanded="true"],
+.playback-history-play:hover,
+.utility-modal-page-button:hover:not(:disabled) {
+  border-color: var(--fluent-blue);
+  background: #ebf3fc;
+  color: var(--fluent-blue-pressed);
+  transform: none;
+  box-shadow: none;
+}
+
+.song-list-tools-popover {
+  border: 1px solid var(--fluent-stroke);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px);
+}
+
+.song-list-tool-field,
+.song-list-tool-actions { border-color: var(--fluent-stroke); }
+.song-list-tool-action { border-color: var(--fluent-stroke); background: #fff; color: var(--fluent-text); }
+.song-list-tool-action:hover { border-color: var(--fluent-stroke-strong); background: #f5f9fd; color: var(--fluent-blue); transform: none; }
+.song-list-tool-action.is-warning { border-color: #f2c661; background: #fff8e8; color: #8a5700; }
+
+.batch-toolbar {
+  padding: 12px 14px;
+  border-width: 1px;
+  border-color: var(--fluent-blue);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.local-music-page-hint,
+.local-music-hint,
+.category-source-empty,
+.no-results {
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.local-music-item,
+.collection-item,
+.utility-modal-list,
+.download-records-list {
+  border-color: var(--fluent-stroke);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.local-music-item:hover,
+.collection-item:hover { border-color: var(--fluent-stroke-strong); box-shadow: 0 3px 10px rgba(42, 62, 92, 0.09); }
+.local-music-cover, .playback-history-cover { border-radius: 4px; background: #ebf3fc; color: var(--fluent-blue); }
+
+.category-current-badge,
+.category-source-tab-count,
+.utility-modal-count,
+.download-record-status,
+.local-music-missing { border-radius: 4px; }
+
+.category-current-badge,
+.category-source-tab.is-active .category-source-tab-count,
+.utility-modal-count {
+  border-color: #b4d6fa;
+  background: #ebf3fc;
+  color: var(--fluent-blue-pressed);
+}
+
+.utility-modal {
+  border-color: var(--fluent-stroke);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+}
+.utility-modal .modal-header { border-color: var(--fluent-stroke); }
+.utility-modal .modal-header h3 i { color: var(--fluent-blue); }
+.download-records-table th { background: #f5f5f5; color: var(--fluent-muted); letter-spacing: 0; }
+.download-records-table td { border-color: #ededed; }
+.download-records-table tbody tr:hover, .playback-history-item:hover { background: #f5f9fd; }
+
+/* Semantic colors stay distinct from the blue interaction color. */
+.download-record-status.is-success,
+.qr-login-status.success { background: #f1faf1; color: #0b6a0b; border-color: #9fd89f; }
+.download-record-status.is-skipped,
+.qr-login-status.warning { background: #fff8e8; color: #8a5700; border-color: #f2c661; }
+.download-record-status.is-failed,
+.qr-login-status.error { background: #fdf3f4; color: #a4262c; border-color: #e37d80; }
+
+.app-toast { border-radius: 6px; }
+.app-toast-success { border-left: 3px solid #107c10; background: rgba(255, 255, 255, 0.96); }
+.app-toast-warning { border-left: 3px solid #d97706; background: rgba(255, 255, 255, 0.96); }
+.app-toast-error { border-left: 3px solid #d13438; background: rgba(255, 255, 255, 0.96); }
+.app-toast-info { border-left: 3px solid var(--fluent-blue); background: rgba(255, 255, 255, 0.96); }
+
+/* Settings use full-width sections instead of one undifferentiated form. */
+.settings-modal {
+  width: min(760px, calc(100vw - 40px));
+  max-width: 760px;
+  max-height: min(860px, calc(100vh - 40px));
+  padding: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(250, 250, 250, 0.97);
+}
+
+.settings-modal-header {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 18px 22px 15px;
+  border-bottom: 1px solid var(--fluent-stroke);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.settings-modal-header h3 { font-size: 18px; }
+.settings-modal-header p { margin: 3px 0 0; color: var(--fluent-muted); font-size: 12px; }
+.settings-modal-body { padding: 0; background: #f7f7f7; }
+
+.settings-section {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--fluent-stroke);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.settings-section + .settings-section { margin-top: 8px; border-top: 1px solid var(--fluent-stroke); }
+.settings-section-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+.settings-section-icon { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 30px; border-radius: 6px; background: #ebf3fc; color: var(--fluent-blue); }
+.settings-section-header h4 { margin: 0; color: var(--fluent-text); font-size: 14px; font-weight: 650; }
+.settings-section-header p { margin: 2px 0 0; color: var(--fluent-muted); font-size: 11px; }
+
+.settings-accounts .cookie-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+  margin: 0;
+}
+
+.settings-section .cookie-item { margin: 0 0 12px; }
+.settings-section .cookie-item:last-child { margin-bottom: 0; }
+.settings-accounts .cookie-item { min-width: 0; margin: 0; }
+.settings-section .cookie-item > label:not(.setting-toggle) { margin-bottom: 6px; color: var(--fluent-muted); font-size: 11px; }
+.settings-section input[type="text"],
+.settings-section input[type="password"],
+.settings-section input[type="url"],
+.settings-section input[type="number"],
+.settings-section select { min-height: 38px; border-radius: 4px; }
+
+.settings-accounts .cookie-input-row { align-items: stretch; }
+.settings-accounts .cookie-input-row input { min-width: 0; }
+.settings-accounts .cookie-qr-btn { min-height: 38px; padding: 7px 10px; white-space: nowrap; }
+.settings-section .setting-item { padding: 11px 12px; border-color: var(--fluent-stroke); border-radius: 6px; background: #fafafa; }
+.settings-section .setting-link-row { width: 100%; margin-bottom: 8px; }
+.setting-link-icon { border-radius: 4px; background: #ebf3fc; color: var(--fluent-blue); }
+.setting-switch { width: 40px; height: 22px; border-radius: 11px; }
+.setting-switch::before { width: 16px; height: 16px; }
+.setting-toggle input[type="checkbox"]:checked + .setting-switch { background: var(--fluent-blue); }
+.setting-toggle input[type="checkbox"]:checked + .setting-switch::before { transform: translateX(18px); }
+.settings-modal-footer { position: sticky; bottom: 0; padding: 12px 22px; border-top: 1px solid var(--fluent-stroke); background: rgba(255, 255, 255, 0.94); }
+.settings-modal-footer .btn-save { width: auto; min-width: 112px; min-height: 38px; margin: 0 0 0 auto; display: block; padding: 8px 18px; }
+
+@media (max-width: 768px) {
+  .settings-modal { width: min(94vw, 760px); max-height: calc(100vh - 24px); }
+  .settings-modal-header { padding: 16px; }
+  .settings-section { padding: 16px; }
+  .settings-accounts .cookie-list { grid-template-columns: 1fr; gap: 11px; }
+  .settings-accounts .cookie-input-row { flex-direction: row; }
+  .settings-modal-footer { padding: 10px 16px; }
+  .settings-modal-footer .btn-save { width: 100%; }
+  .download-dir-control { grid-template-columns: 1fr; }
+}

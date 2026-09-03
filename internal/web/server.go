@@ -303,6 +303,7 @@ func renderIndex(c *gin.Context, songs []model.Song, playlists []model.Playlist,
 		pageStartDisplay = pageStart + 1
 	}
 	c.HTML(200, "index.html", gin.H{
+		"CurrentPath":             c.Request.URL.Path,
 		"Result":                  songs,
 		"Playlists":               playlists,
 		"Page":                    page,
@@ -429,6 +430,8 @@ func StartWithOptions(port string, opts StartOptions) {
 	// Static assets embedded at build time.
 	api.GET("/icon.png", func(c *gin.Context) { c.FileFromFS("templates/static/images/icon.png", http.FS(templateFS)) })
 	api.GET("/style.css", func(c *gin.Context) { c.FileFromFS("templates/static/css/style.css", http.FS(templateFS)) })
+	api.GET("/react-app.css", func(c *gin.Context) { c.FileFromFS("templates/static/react/react-app.css", http.FS(templateFS)) })
+	api.GET("/react-app.js", func(c *gin.Context) { c.FileFromFS("templates/static/react/react-app.js", http.FS(templateFS)) })
 	api.GET("/videogen.css", func(c *gin.Context) { c.FileFromFS("templates/static/css/videogen.css", http.FS(templateFS)) })
 	api.GET("/videogen.js", func(c *gin.Context) { c.FileFromFS("templates/static/js/videogen.js", http.FS(templateFS)) })
 	api.GET("/app.js", func(c *gin.Context) { c.FileFromFS("templates/static/js/app.js", http.FS(templateFS)) })

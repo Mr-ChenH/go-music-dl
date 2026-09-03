@@ -444,6 +444,7 @@ function handleConfigAuthResponse(response, payload = null) {
 function setAuthFloatLoggedIn(loggedIn) {
   const form = document.getElementById("auth-float-form");
   const icon = document.getElementById("auth-float-icon");
+  const label = document.getElementById("auth-float-label");
   if (!form || !icon) return;
   form.dataset.loggedIn = loggedIn ? "1" : "0";
   form.title = loggedIn ? "退出登录" : "登录";
@@ -452,6 +453,7 @@ function setAuthFloatLoggedIn(loggedIn) {
   icon.className = loggedIn
     ? "fa-solid fa-arrow-right-from-bracket"
     : "fa-solid fa-right-to-bracket";
+  if (label) label.textContent = loggedIn ? "退出登录" : "账户";
 }
 
 async function refreshAuthFloat() {
@@ -1174,6 +1176,9 @@ function formatSizeBytes(bytes) {
 
 function initializePageContent(root = document) {
   resetAutoSwitchInvalidState();
+  if (typeof window.mountMusicDlReact === "function") {
+    window.mountMusicDlReact(root);
+  }
   bindSourceSelectorButtons(root);
   initSourceSelectorCollapse(root);
   bindSearchForm(root);
@@ -1295,6 +1300,9 @@ function syncRightToolbar(nextDoc, currentContainer) {
     currentToolbar.replaceWith(nextToolbar.cloneNode(true));
   } else if (currentContainer) {
     currentContainer.before(nextToolbar.cloneNode(true));
+  }
+  if (typeof window.mountMusicDlReact === "function") {
+    window.mountMusicDlReact(document);
   }
   bindAuthFloat();
   refreshAuthFloat();
@@ -2387,7 +2395,7 @@ function showDuplicateModal(groups, loading, pagination = {}) {
               url: buildStreamURL(s.id, "local", s.name, s.artist, "", "", ""),
               cover: "",
               lrc: "",
-              theme: "#10b981",
+              theme: "#0f6cbd",
               custom_id: s.id,
               source: "local",
               duration: s.duration || 0,
@@ -3399,6 +3407,15 @@ async function openDownloadRecordsModal() {
   await loadDownloadRecordsPage(1);
 }
 
+function openDownloadRecordsPage() {
+  if (typeof window.openMusicDlWorkspace === "function") {
+    setDownloadRecordsButtonState("idle");
+    window.openMusicDlWorkspace("downloads");
+    return;
+  }
+  openDownloadRecordsModal();
+}
+
 function setDownloadRecordsButtonState(state = "idle") {
   const button = document.getElementById("download-records-button");
   if (!button) return;
@@ -3418,6 +3435,10 @@ function setDownloadRecordsButtonState(state = "idle") {
 }
 
 async function refreshOpenDownloadRecords() {
+  if (document.body.dataset.workspaceView === "downloads") {
+    window.dispatchEvent(new CustomEvent("musicdl:workspace-refresh"));
+    return true;
+  }
   const modal = document.getElementById("downloadRecordsModal");
   if (!modal || modal.style.display !== "flex") return false;
   await loadDownloadRecordsPage(1);
@@ -3587,6 +3608,7 @@ function rememberPlaybackHistory(audio) {
   );
   records.unshift(entry);
   writePlaybackHistory(records);
+  window.dispatchEvent(new CustomEvent("musicdl:playback-history-change"));
 }
 
 function formatPlaybackHistoryTime(value) {
@@ -3658,6 +3680,20 @@ function openPlaybackHistoryModal() {
   modal.style.display = "flex";
 }
 
+function openPlaybackHistoryPage() {
+  if (typeof window.openMusicDlWorkspace === "function") {
+    window.openMusicDlWorkspace("history");
+    return;
+  }
+  openPlaybackHistoryModal();
+}
+
+function openNowPlayingPage() {
+  if (typeof window.openMusicDlWorkspace === "function") {
+    window.openMusicDlWorkspace("player");
+  }
+}
+
 function closePlaybackHistoryModal() {
   const modal = document.getElementById("playbackHistoryModal");
   if (modal) modal.style.display = "none";
@@ -3674,7 +3710,10 @@ function clearPlaybackHistory() {
 }
 
 function playPlaybackHistoryItem(index) {
-  const entry = activePlaybackHistoryEntries[index];
+  playPlaybackHistoryEntry(activePlaybackHistoryEntries[index]);
+}
+
+function playPlaybackHistoryEntry(entry) {
   if (!entry || !ap?.list) return;
 
   const song = {
@@ -3697,7 +3736,7 @@ function playPlaybackHistoryItem(index) {
     cover: song.cover,
     lrc: lyricURLs.line,
     raw_lrc: lyricURLs.auto,
-    theme: "#10b981",
+    theme: "#0f6cbd",
     custom_id: song.id,
     source: song.source,
     duration: song.duration,
@@ -3706,6 +3745,8 @@ function playPlaybackHistoryItem(index) {
   ap.play();
   closePlaybackHistoryModal();
 }
+
+window.playPlaybackHistoryEntry = playPlaybackHistoryEntry;
 
 function escapeHtml(str) {
   if (!str) return "";
@@ -4069,8 +4110,8 @@ function floatPageNumClick() {
   input.style.textAlign = "center";
   input.style.fontSize = "13px";
   input.style.fontWeight = "700";
-  input.style.color = "#10b981";
-  input.style.border = "2px solid #10b981";
+  input.style.color = "#0f6cbd";
+  input.style.border = "2px solid #0f6cbd";
   input.style.borderRadius = "6px";
   input.style.outline = "none";
   input.style.background = "white";
@@ -4956,7 +4997,7 @@ try {
     container: document.getElementById("aplayer"),
     fixed: true,
     autoplay: false,
-    theme: "#10b981",
+    theme: "#0f6cbd",
     loop: "all",
     order: "list",
     preload: "metadata",
@@ -5193,7 +5234,7 @@ setTimeout(() => {
   const apPic = document.querySelector(".aplayer-pic");
   if (apPic) {
     apPic.style.cursor = "pointer";
-    apPic.title = "点击打开详情/生成视频";
+    apPic.title = "打开正在播放";
 
     apPic.addEventListener(
       "click",
@@ -5207,9 +5248,13 @@ setTimeout(() => {
         e.stopPropagation();
         e.preventDefault();
 
+        if (typeof window.openMusicDlWorkspace === "function") {
+          window.openMusicDlWorkspace("player");
+          return;
+        }
+
         const idx = ap.list.index;
         const audio = ap.list.audios[idx];
-
         if (audio && audio.custom_id && window.VideoGen) {
           window.VideoGen.open({
             id: audio.custom_id,
@@ -5820,7 +5865,7 @@ function playAllAndJumpTo(btn) {
       cover: coverUrl,
       lrc: lyricURLs.line,
       raw_lrc: lyricURLs.auto,
-      theme: "#10b981",
+      theme: "#0f6cbd",
       custom_id: playbackSong.id,
       original_id: ds.id,
       source: playbackSong.source,
@@ -6147,7 +6192,7 @@ function getSelectedSongs() {
         cover: song.cover,
         lrc: lyricURLs.line,
         raw_lrc: lyricURLs.auto,
-        theme: "#10b981",
+        theme: "#0f6cbd",
       });
     }
   });

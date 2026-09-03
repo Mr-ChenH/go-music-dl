@@ -1,11 +1,19 @@
 {{define "modals"}}
 <div id="cookieModal" class="modal-overlay" style="z-index: 1001;">
-    <div class="modal">
-        <div class="modal-header">
-            <h3>设置 Cookies</h3>
+    <div class="modal settings-modal">
+        <div class="modal-header settings-modal-header">
+            <div>
+                <h3>系统设置</h3>
+                <p>账户、下载、播放与应用功能</p>
+            </div>
             <div class="modal-close" onclick="document.getElementById('cookieModal').style.display='none'"><i class="fa-solid fa-xmark"></i></div>
         </div>
-        <div class="modal-body">
+        <div class="modal-body settings-modal-body">
+            <section class="settings-section settings-accounts">
+                <header class="settings-section-header">
+                    <span class="settings-section-icon"><i class="fa-solid fa-key"></i></span>
+                    <div><h4>平台账户</h4><p>配置各音乐平台的 Cookie 或扫码登录</p></div>
+                </header>
             <div class="cookie-list">
                 {{ range $source := .AllSources }}
                 <div class="cookie-item">
@@ -28,6 +36,13 @@
                 </div>
                 {{ end }}
             </div>
+            </section>
+
+            <section class="settings-section settings-downloads">
+                <header class="settings-section-header">
+                    <span class="settings-section-icon"><i class="fa-solid fa-download"></i></span>
+                    <div><h4>下载与同步</h4><p>文件保存、元数据与远端同步</p></div>
+                </header>
             <div class="cookie-item setting-item">
                 <label class="setting-toggle" for="setting-embed-download">
                     <input type="checkbox" id="setting-embed-download">
@@ -99,6 +114,13 @@
                 </label>
                 <p class="setting-hint">开启后，在线歌曲开始播放时会后台保存到本地下载目录；默认关闭，避免持续占用储存空间。</p>
             </div>
+            </section>
+
+            <section class="settings-section settings-playback">
+                <header class="settings-section-header">
+                    <span class="settings-section-icon"><i class="fa-solid fa-sliders"></i></span>
+                    <div><h4>播放与列表</h4><p>播放器行为、分页和自动处理</p></div>
+                </header>
             <div class="cookie-item setting-item">
                 <label class="setting-toggle" for="setting-floating-lyrics">
                     <input type="checkbox" id="setting-floating-lyrics">
@@ -132,6 +154,13 @@
                 </label>
                 <p class="setting-hint">音乐列表检测完成后，会自动选中当前列表全部无效歌曲并执行批量换源，默认开启。</p>
             </div>
+            </section>
+
+            <section class="settings-section settings-application">
+                <header class="settings-section-header">
+                    <span class="settings-section-icon"><i class="fa-solid fa-window-restore"></i></span>
+                    <div><h4>应用功能</h4><p>版本信息、活动记录与视频工具入口</p></div>
+                </header>
             <button type="button" class="cookie-item setting-item setting-link-row" onclick="openAboutAppModal()">
                 <span class="setting-link-icon"><i class="fa-solid fa-circle-info"></i></span>
                 <span class="setting-link-body">
@@ -140,7 +169,7 @@
                 </span>
                 <i class="fa-solid fa-chevron-right setting-link-chevron" aria-hidden="true"></i>
             </button>
-            <button type="button" class="cookie-item setting-item setting-link-row" onclick="openDownloadRecordsModal()">
+            <button type="button" class="cookie-item setting-item setting-link-row" onclick="openDownloadRecordsPage()">
                 <span class="setting-link-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
                 <span class="setting-link-body">
                     <span class="setting-link-title">下载记录</span>
@@ -180,7 +209,10 @@
                 </label>
                 <p class="setting-hint">控制视频生成弹窗中的导出视频入口，默认隐藏。</p>
             </div>
-            <button class="btn-save" onclick="saveCookies()">保存设置</button>
+            </section>
+            <div class="settings-modal-footer">
+                <button class="btn-save" onclick="saveCookies()">保存设置</button>
+            </div>
         </div>
     </div>
 </div>

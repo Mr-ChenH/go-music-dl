@@ -9,6 +9,7 @@ target/
 music-dl-desktop*
 go-music-dl-desktop*
 dist/
+node_modules/
 nul
 video_output/
 data/video_output/
