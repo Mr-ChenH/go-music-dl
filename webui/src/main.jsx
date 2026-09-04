@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { FluentProvider, webLightTheme } from "@fluentui/react-components";
@@ -70,7 +70,7 @@ function SearchConsole({ node }) {
     ? { group: "资料库", title: "本地音乐" }
     : path.includes("/collections") || path.includes("/collection")
       ? { group: "资料库", title: data.collectionName || "本地歌单" }
-      : path.includes("/playlist_categories")
+      : path.includes("/playlist_categories") || path.includes("/category_playlists")
         ? { group: "发现", title: "歌单分类" }
         : path.includes("/user_playlists")
           ? { group: "发现", title: "我的歌单" }
@@ -227,9 +227,16 @@ function NavButton({ label, icon: Icon, onClick, active = false, className = "",
 
 function AppNavigation({ node }) {
   const data = node.dataset;
-  const path = data.currentPath || window.location.pathname;
+  const [path, setPath] = useState(data.currentPath || window.location.pathname);
   const workspaceView = useWorkspaceView();
   const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => {
+    const handlePathChange = (event) => {
+      setPath(String(event.detail || window.location.pathname));
+    };
+    window.addEventListener("musicdl:path-change", handlePathChange);
+    return () => window.removeEventListener("musicdl:path-change", handlePathChange);
+  }, []);
   const go = (name, ...args) => () => {
     setMoreOpen(false);
     invoke(name, ...args);
@@ -266,7 +273,7 @@ function AppNavigation({ node }) {
           <h2>发现</h2>
           <NavButton label="搜索与发现" icon={Search24Regular} onClick={goHome} active={!workspaceView && (path === `${data.root}/` || path === data.root || isPath("/search"))} />
           <NavButton label="每日推荐" icon={Sparkle24Regular} onClick={go("goToRecommend")} active={!workspaceView && isPath("/recommend")} />
-          <NavButton label="歌单分类" icon={Grid24Regular} onClick={go("goToPlaylistCategories")} active={!workspaceView && isPath("/playlist_categories")} />
+          <NavButton label="歌单分类" icon={Grid24Regular} onClick={go("goToPlaylistCategories")} active={!workspaceView && isPath("/playlist_categories", "/category_playlists")} />
           <NavButton label="我的歌单" icon={Heart24Regular} onClick={go("goToUserPlaylists")} active={!workspaceView && isPath("/user_playlists")} />
         </section>
 
@@ -300,7 +307,7 @@ function AppNavigation({ node }) {
         <NavButton label="正在播放" icon={MusicNote224Regular} onClick={goWorkspace("player")} active={workspaceView === "player"} />
         <NavButton label="本地音乐" icon={FolderOpen24Regular} onClick={go("openLocalMusicPage")} active={!workspaceView && isPath("/local_music_page")} />
         <NavButton label="下载" icon={History24Regular} onClick={goWorkspace("downloads")} active={workspaceView === "downloads"} />
-        <NavButton label="更多" icon={MoreHorizontal24Regular} onClick={() => setMoreOpen((value) => !value)} active={moreOpen || workspaceView === "history" || (!workspaceView && isPath("/recommend", "/playlist_categories", "/user_playlists", "/collections", "/collection"))} />
+        <NavButton label="更多" icon={MoreHorizontal24Regular} onClick={() => setMoreOpen((value) => !value)} active={moreOpen || workspaceView === "history" || (!workspaceView && isPath("/recommend", "/playlist_categories", "/category_playlists", "/user_playlists", "/collections", "/collection"))} />
       </nav>
 
       {moreOpen ? (

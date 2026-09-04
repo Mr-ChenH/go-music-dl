@@ -885,6 +885,7 @@ async function handleDownloadClick(link) {
 }
 
 let navigationAbortController = null;
+let navigationTargetURL = "";
 let pageNavigationEventsBound = false;
 let songSortMode = "default";
 let songSortDirection = "desc";
@@ -1287,19 +1288,24 @@ function shouldHandleInternalNavigation(link, event) {
 }
 
 function syncReactNavigationMount(nextDoc, currentContainer) {
-  const currentToolbar = document.querySelector("#react-navigation-root");
-  const nextToolbar = nextDoc.querySelector("#react-navigation-root");
+  const currentNavigation = document.querySelector("#react-navigation-root");
+  const nextNavigation = nextDoc.querySelector("#react-navigation-root");
 
-  if (!nextToolbar) {
-    if (currentToolbar) currentToolbar.remove();
+  if (!nextNavigation) {
+    if (currentNavigation) currentNavigation.remove();
     return;
   }
 
-  // Replace server-provided navigation metadata before remounting React.
-  if (currentToolbar) {
-    currentToolbar.replaceWith(nextToolbar.cloneNode(true));
+  if (currentNavigation) {
+    currentNavigation.dataset.root = nextNavigation.dataset.root || currentNavigation.dataset.root;
+    currentNavigation.dataset.currentPath = nextNavigation.dataset.currentPath || window.location.pathname;
+    window.dispatchEvent(
+      new CustomEvent("musicdl:path-change", {
+        detail: currentNavigation.dataset.currentPath,
+      }),
+    );
   } else if (currentContainer) {
-    currentContainer.before(nextToolbar.cloneNode(true));
+    currentContainer.before(nextNavigation.cloneNode(true));
   }
   if (typeof window.mountMusicDlReact === "function") {
     window.mountMusicDlReact(document);
@@ -1334,6 +1340,224 @@ function scrollToSearchResults() {
   });
 }
 
+function setNavigationBusy(busy) {
+  document.body.classList.toggle("is-navigating", busy);
+  const navigation = document.getElementById("react-navigation-root");
+  if (navigation) {
+    if (busy) {
+      navigation.setAttribute("aria-busy", "true");
+    } else {
+      navigation.removeAttribute("aria-busy");
+    }
+  }
+}
+
+function commitNavigationHistory(targetURL, options) {
+  const historyMode = options.historyMode || "push";
+  if (historyMode === "replace") {
+    window.history.replaceState(null, "", targetURL.toString());
+  } else if (historyMode !== "none") {
+    if (targetURL.toString() === window.location.href) {
+      window.history.replaceState(null, "", targetURL.toString());
+    } else {
+      window.history.pushState(null, "", targetURL.toString());
+    }
+  }
+}
+
+function showPendingNavigation(targetURL, options) {
+  const container = document.querySelector(".container");
+  if (!container) return;
+
+  const shell = document.createElement("div");
+  shell.className = "search-console navigation-pending-view";
+
+  const header = document.createElement("header");
+  header.className = "workspace-page-header";
+  const heading = document.createElement("div");
+  const kicker = document.createElement("span");
+  kicker.className = "workspace-kicker";
+  kicker.textContent = options.pendingGroup || "发现";
+  const title = document.createElement("h1");
+  title.textContent = options.pendingTitle || "正在加载";
+  heading.append(kicker, title);
+  header.append(heading);
+
+  const panel = document.createElement("section");
+  panel.className = "navigation-pending-panel";
+  panel.setAttribute("aria-label", "正在加载");
+  panel.setAttribute("aria-busy", "true");
+  for (let index = 0; index < 8; index += 1) {
+    const item = document.createElement("span");
+    item.className = "navigation-pending-item";
+    panel.append(item);
+  }
+
+  shell.append(header, panel);
+  container.replaceChildren(shell);
+  document.title = `${title.textContent} - music-dl`;
+
+  document.body.classList.remove("react-workspace-page-active");
+  document.body.dataset.workspaceView = "";
+  window.dispatchEvent(new CustomEvent("musicdl:workspace-change", { detail: "" }));
+
+  const navigation = document.getElementById("react-navigation-root");
+  if (navigation) navigation.dataset.currentPath = targetURL.pathname;
+  window.dispatchEvent(
+    new CustomEvent("musicdl:path-change", { detail: targetURL.pathname }),
+  );
+}
+
+function parseNavigationDocument(html) {
+  return new DOMParser().parseFromString(html, "text/html");
+}
+
+function applyNavigationDocument(nextDoc, targetURL, options, commitHistory) {
+  const nextContainer = nextDoc.querySelector(".container");
+  const currentContainer = document.querySelector(".container");
+  if (!nextContainer || !currentContainer) {
+    throw new Error("missing container");
+  }
+
+  currentContainer.innerHTML = nextContainer.innerHTML;
+  syncReactNavigationMount(nextDoc, currentContainer);
+  defaultDocumentTitle = nextDoc.title || defaultDocumentTitle;
+  document.title = defaultDocumentTitle;
+
+  const renderedPage = nextContainer.querySelector(".page-summary");
+  const renderedPageMatch = renderedPage
+    ? renderedPage.textContent.match(/(\d+)\s*\/\s*(\d+)/)
+    : null;
+  if (renderedPageMatch && targetURL.searchParams.has("page")) {
+    targetURL.searchParams.set("page", renderedPageMatch[1]);
+  }
+  if (commitHistory) commitNavigationHistory(targetURL, options);
+
+  initializePageContent(currentContainer);
+  if (options.scrollToResults) {
+    scrollToSearchResults();
+  } else if (options.scroll !== false) {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+}
+
+function progressiveSourceFromTarget(target) {
+  if (!target) return "";
+  return target.slice(target.lastIndexOf("-") + 1);
+}
+
+function mergeProgressiveSourceDocument(nextDoc, sourceOrder) {
+  const currentTabs = document.querySelector(".category-source-tabs");
+  const currentPanels = document.querySelector(".category-source-panels");
+  const nextTab = nextDoc.querySelector(".category-source-tab");
+  if (!nextTab) return !!currentTabs;
+  if (!currentTabs || !currentPanels) return false;
+
+  const target = nextTab.dataset.target;
+  if (!target || document.getElementById(target)) return true;
+
+  const nextPanel = nextDoc.getElementById(target);
+  if (!nextPanel) return true;
+
+  const tab = nextTab.cloneNode(true);
+  const panel = nextPanel.cloneNode(true);
+  tab.classList.remove("is-active");
+  panel.classList.remove("is-active");
+
+  const source = progressiveSourceFromTarget(target);
+  const sourceIndex = sourceOrder.indexOf(source);
+  const followingTab = Array.from(currentTabs.children).find((candidate) => {
+    const candidateSource = progressiveSourceFromTarget(candidate.dataset.target);
+    return sourceOrder.indexOf(candidateSource) > sourceIndex;
+  });
+  if (followingTab) {
+    const followingPanel = document.getElementById(followingTab.dataset.target);
+    currentTabs.insertBefore(tab, followingTab);
+    currentPanels.insertBefore(panel, followingPanel || null);
+  } else {
+    currentTabs.append(tab);
+    currentPanels.append(panel);
+  }
+  return true;
+}
+
+function updateProgressiveSourceStatus(completed, total) {
+  let status = document.querySelector(".progressive-source-status");
+  const panel = document.querySelector(".category-panel");
+  if (!panel) return;
+  if (!status) {
+    status = document.createElement("div");
+    status.className = "progressive-source-status";
+    status.setAttribute("role", "status");
+    panel.querySelector(".category-panel-header")?.after(status);
+  }
+  const remaining = Math.max(0, total - completed);
+  status.textContent = remaining > 0
+    ? `默认来源已显示，其他 ${remaining} 个来源并行加载中`
+    : `已完成 ${completed}/${total}`;
+}
+
+function showProgressiveNavigationFailure() {
+  const panel = document.querySelector(".navigation-pending-panel");
+  if (!panel) return;
+  panel.className = "navigation-pending-error";
+  panel.replaceChildren();
+  const title = document.createElement("strong");
+  title.textContent = "暂时无法加载内容";
+  const detail = document.createElement("span");
+  detail.textContent = "各音乐来源均未响应，请稍后重试";
+  panel.append(title, detail);
+  panel.setAttribute("aria-busy", "false");
+}
+
+async function loadProgressiveSourceNavigation(targetURL, options, controller) {
+  const sources = options.progressiveSources;
+  const [defaultSource, ...remainingSources] = sources;
+  let rendered = false;
+  let completed = 0;
+
+  const loadSource = async (source) => {
+    const sourceURL = new URL(targetURL);
+    sourceURL.searchParams.delete("sources");
+    sourceURL.searchParams.append("sources", source);
+
+    try {
+      const response = await fetch(sourceURL.toString(), {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return parseNavigationDocument(await response.text());
+    } catch (error) {
+      if (error && error.name === "AbortError") throw error;
+      return null;
+    }
+  };
+
+  const renderSource = (nextDoc) => {
+    if (!nextDoc) return;
+    if (!rendered || !mergeProgressiveSourceDocument(nextDoc, sources)) {
+      applyNavigationDocument(nextDoc, targetURL, options, false);
+      rendered = true;
+    }
+  };
+
+  renderSource(await loadSource(defaultSource));
+  completed += 1;
+  if (rendered && remainingSources.length) {
+    updateProgressiveSourceStatus(completed, sources.length);
+  }
+
+  await Promise.all(remainingSources.map(async (source) => {
+    renderSource(await loadSource(source));
+    completed += 1;
+    if (rendered) updateProgressiveSourceStatus(completed, sources.length);
+  }));
+
+  document.querySelector(".progressive-source-status")?.remove();
+  if (!rendered) showProgressiveNavigationFailure();
+}
+
 async function navigateTo(url, options = {}) {
   let targetURL;
   try {
@@ -1350,15 +1574,38 @@ async function navigateTo(url, options = {}) {
     return false;
   }
 
+  const targetHref = targetURL.toString();
+  if (navigationAbortController && options.eager === true) {
+    const activeTarget = new URL(navigationTargetURL, window.location.href);
+    if (activeTarget.pathname === targetURL.pathname) {
+      return false;
+    }
+  }
+  if (navigationAbortController && navigationTargetURL === targetHref) {
+    return false;
+  }
   if (navigationAbortController) {
     navigationAbortController.abort();
   }
 
   const controller = new AbortController();
   navigationAbortController = controller;
+  navigationTargetURL = targetHref;
+  setNavigationBusy(true);
+
+  const eagerNavigation = options.eager === true;
+  if (eagerNavigation) {
+    commitNavigationHistory(targetURL, options);
+    showPendingNavigation(targetURL, options);
+  }
 
   try {
-    const response = await fetch(targetURL.toString(), {
+    if (Array.isArray(options.progressiveSources) && options.progressiveSources.length) {
+      await loadProgressiveSourceNavigation(targetURL, options, controller);
+      return true;
+    }
+
+    const response = await fetch(targetHref, {
       headers: {
         "X-Requested-With": "XMLHttpRequest",
       },
@@ -1368,47 +1615,8 @@ async function navigateTo(url, options = {}) {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const html = await response.text();
-    const parser = new DOMParser();
-    const nextDoc = parser.parseFromString(html, "text/html");
-    const nextContainer = nextDoc.querySelector(".container");
-    const currentContainer = document.querySelector(".container");
-
-    if (!nextContainer || !currentContainer) {
-      throw new Error("missing container");
-    }
-
-    currentContainer.innerHTML = nextContainer.innerHTML;
-    syncReactNavigationMount(nextDoc, currentContainer);
-    defaultDocumentTitle = nextDoc.title || defaultDocumentTitle;
-    document.title = defaultDocumentTitle;
-
-    const renderedPage = nextContainer.querySelector(".page-summary");
-    const renderedPageMatch = renderedPage
-      ? renderedPage.textContent.match(/(\d+)\s*\/\s*(\d+)/)
-      : null;
-    if (renderedPageMatch && targetURL.searchParams.has("page")) {
-      targetURL.searchParams.set("page", renderedPageMatch[1]);
-    }
-
-    const historyMode = options.historyMode || "push";
-    if (historyMode === "replace") {
-      window.history.replaceState(null, "", targetURL.toString());
-    } else if (historyMode !== "none") {
-      if (targetURL.toString() === window.location.href) {
-        window.history.replaceState(null, "", targetURL.toString());
-      } else {
-        window.history.pushState(null, "", targetURL.toString());
-      }
-    }
-
-    initializePageContent(currentContainer);
-
-    if (options.scrollToResults) {
-      scrollToSearchResults();
-    } else if (options.scroll !== false) {
-      window.scrollTo({ top: 0, behavior: "auto" });
-    }
+    const nextDoc = parseNavigationDocument(await response.text());
+    applyNavigationDocument(nextDoc, targetURL, options, !eagerNavigation);
 
     return true;
   } catch (error) {
@@ -1429,6 +1637,8 @@ async function navigateTo(url, options = {}) {
   } finally {
     if (navigationAbortController === controller) {
       navigationAbortController = null;
+      navigationTargetURL = "";
+      setNavigationBusy(false);
     }
   }
 }
@@ -1476,7 +1686,12 @@ function getActivePaginationState() {
   const totalPages = parsePositiveInt(paginationBar.dataset.totalPages, 1);
   if (totalPages <= 1) return null;
 
-  return { currentPage, totalPages };
+  return {
+    currentPage,
+    totalPages,
+    pageSize: parsePositiveInt(paginationBar.dataset.pageSize, 20),
+    isCategoryResults: Boolean(paginationBar.closest("#category-playlist-results")),
+  };
 }
 
 function handlePaginationShortcut(event) {
@@ -1504,7 +1719,11 @@ function handlePaginationShortcut(event) {
   if (nextPage < 1 || nextPage > state.totalPages) return;
 
   event.preventDefault();
-  goToPage(nextPage);
+  if (state.isCategoryResults) {
+    loadCategoryPlaylistsPage(nextPage, state.pageSize);
+  } else {
+    goToPage(nextPage, state.pageSize);
+  }
 }
 
 function togglePlayback() {
@@ -1566,7 +1785,11 @@ function bindPageNavigationEvents() {
       if (!shouldHandleInternalNavigation(link, event)) return;
 
       event.preventDefault();
-      navigateTo(link.href);
+      if (link.classList.contains("category-chip")) {
+        loadCategoryPlaylists(link);
+      } else {
+        navigateTo(link.href);
+      }
     },
     true,
   );
@@ -1691,19 +1914,145 @@ function toggleSearchType(type) {
 }
 
 function goToRecommend() {
-  const supported = ["netease", "qq", "kugou", "kuwo"];
-  const selected = [];
-  document.querySelectorAll(".source-checkbox:checked").forEach((cb) => {
-    if (supported.includes(cb.value)) {
-      selected.push(cb.value);
-    }
+  navigateTo(API_ROOT + "/recommend", {
+    eager: true,
+    pendingGroup: "发现",
+    pendingTitle: "每日推荐",
+    progressiveSources: ["netease", "qq", "kugou", "kuwo"],
   });
+}
 
-  if (selected.length === 0) {
-    navigateTo(API_ROOT + "/recommend?sources=" + supported.join("&sources="));
-  } else {
-    navigateTo(API_ROOT + "/recommend?sources=" + selected.join("&sources="));
+let categoryPlaylistAbortController = null;
+let activeCategoryPlaylistLink = null;
+
+function clearCategoryPlaylistResults() {
+  if (categoryPlaylistAbortController) {
+    categoryPlaylistAbortController.abort();
+    categoryPlaylistAbortController = null;
   }
+  activeCategoryPlaylistLink = null;
+  document.querySelectorAll(".category-chip.is-active").forEach((chip) => {
+    chip.classList.remove("is-active");
+    chip.removeAttribute("aria-current");
+  });
+  const results = document.getElementById("category-playlist-results");
+  if (results) {
+    results.replaceChildren();
+    results.hidden = true;
+    results.removeAttribute("aria-busy");
+  }
+}
+
+function showCategoryPlaylistPending(link, results) {
+  results.hidden = false;
+  results.setAttribute("aria-busy", "true");
+  results.replaceChildren();
+
+  const header = document.createElement("header");
+  header.className = "category-results-header";
+  const heading = document.createElement("div");
+  heading.className = "category-results-heading";
+  const context = document.createElement("span");
+  context.className = "category-current-badge";
+  context.textContent = "正在加载";
+  const title = document.createElement("h2");
+  title.textContent = link.querySelector(".category-chip-name")?.textContent?.trim() || "分类歌单";
+  heading.append(context, title);
+  header.append(heading);
+
+  const pending = document.createElement("div");
+  pending.className = "category-results-pending";
+  for (let index = 0; index < 6; index += 1) {
+    const item = document.createElement("span");
+    item.className = "navigation-pending-item";
+    pending.append(item);
+  }
+  results.append(header, pending);
+}
+
+function showCategoryPlaylistError(results, message) {
+  results.hidden = false;
+  results.removeAttribute("aria-busy");
+  results.replaceChildren();
+  const error = document.createElement("div");
+  error.className = "category-source-empty error";
+  error.textContent = message;
+  results.append(error);
+}
+
+async function loadCategoryPlaylists(link, options = {}) {
+  if (!(link instanceof Element)) return false;
+  const href = link.getAttribute("href");
+  if (!href) return false;
+
+  if (categoryPlaylistAbortController) categoryPlaylistAbortController.abort();
+  const controller = new AbortController();
+  categoryPlaylistAbortController = controller;
+  activeCategoryPlaylistLink = link;
+
+  document.querySelectorAll(".category-chip.is-active").forEach((chip) => {
+    chip.classList.remove("is-active");
+    chip.removeAttribute("aria-current");
+  });
+  link.classList.add("is-active");
+  link.setAttribute("aria-current", "true");
+
+  const currentResults = document.getElementById("category-playlist-results");
+  if (!currentResults) return navigateTo(href);
+  showCategoryPlaylistPending(link, currentResults);
+
+  try {
+    const targetURL = new URL(href, window.location.href);
+    if (options.page) targetURL.searchParams.set("page", String(options.page));
+    if (options.pageSize) targetURL.searchParams.set("page_size", String(options.pageSize));
+    const response = await fetch(targetURL.toString(), {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const nextDoc = parseNavigationDocument(await response.text());
+    const nextResults = nextDoc.getElementById("category-playlist-results");
+    if (!nextResults) throw new Error("分类歌单响应缺少结果区域");
+
+    const renderedResults = nextResults.cloneNode(true);
+    currentResults.replaceWith(renderedResults);
+    initializePageContent(renderedResults);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const top = window.scrollY + renderedResults.getBoundingClientRect().top - 12;
+        window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+      });
+    });
+    return true;
+  } catch (error) {
+    if (error && error.name === "AbortError") return false;
+    showCategoryPlaylistError(currentResults, "分类歌单加载失败，请稍后重试");
+    return false;
+  } finally {
+    if (categoryPlaylistAbortController === controller) {
+      categoryPlaylistAbortController = null;
+    }
+  }
+}
+
+function focusCategoryBrowser() {
+  document.querySelector(".category-browser-panel")?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}
+
+function loadCategoryPlaylistsPage(page, pageSize) {
+  const targetPage = Number.parseInt(page, 10);
+  if (!Number.isFinite(targetPage) || targetPage < 1) return false;
+  const link = activeCategoryPlaylistLink || document.querySelector(".category-chip.is-active");
+  if (link) return loadCategoryPlaylists(link, { page: targetPage, pageSize });
+
+  const url = new URL(window.location.href);
+  url.searchParams.set("page", String(targetPage));
+  if (pageSize) url.searchParams.set("page_size", String(pageSize));
+  return navigateTo(url.toString());
 }
 
 function switchCategorySource(tab) {
@@ -1711,31 +2060,34 @@ function switchCategorySource(tab) {
   const panelId = tab.getAttribute("data-target");
   if (!panelId) return;
   const scope = tab.closest(".category-panel") || document;
+  const changed = scope.querySelector(".category-source-tab.is-active") !== tab;
   scope.querySelectorAll(".category-source-tab").forEach(function (t) {
-    t.classList.toggle("is-active", t === tab);
+    const active = t === tab;
+    t.classList.toggle("is-active", active);
+    t.setAttribute("aria-selected", active ? "true" : "false");
   });
   scope.querySelectorAll(".category-source-panel").forEach(function (p) {
     p.classList.toggle("is-active", p.id === panelId);
   });
+  if (changed) clearCategoryPlaylistResults();
 }
 
 function goToPlaylistCategories() {
-  const selected = [];
-  document.querySelectorAll(".source-checkbox:checked").forEach((cb) => {
-    if (cb.dataset.categorySupported === "true") {
-      selected.push(cb.value);
-    }
+  navigateTo(API_ROOT + "/playlist_categories", {
+    eager: true,
+    pendingGroup: "发现",
+    pendingTitle: "歌单分类",
+    progressiveSources: [
+      "netease",
+      "qq",
+      "kugou",
+      "kuwo",
+      "migu",
+      "qianqian",
+      "joox",
+      "apple",
+    ],
   });
-
-  if (selected.length === 0) {
-    navigateTo(API_ROOT + "/playlist_categories");
-  } else {
-    navigateTo(
-      API_ROOT +
-        "/playlist_categories?sources=" +
-        selected.map(encodeURIComponent).join("&sources="),
-    );
-  }
 }
 
 function goToUserPlaylists() {

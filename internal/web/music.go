@@ -153,6 +153,8 @@ func playlistCategorySourcesFromQuery(c *gin.Context) []string {
 	return sources
 }
 
+const playlistAggregationTimeout = 5 * time.Second
+
 func loadPlaylistCategoryPageSources(sources []string) ([]playlistCategoryPageSource, string) {
 	type categoryResult struct {
 		source     string
@@ -160,34 +162,38 @@ func loadPlaylistCategoryPageSources(sources []string) ([]playlistCategoryPageSo
 		err        error
 	}
 
-	results := make(map[string]categoryResult)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	results := make(map[string]categoryResult, len(sources))
+	resultCh := make(chan categoryResult, len(sources))
+	pending := 0
 
 	for _, source := range sources {
 		fn := core.GetPlaylistCategoriesFunc(source)
 		if fn == nil {
 			continue
 		}
-		wg.Add(1)
+		pending++
 		go func(src string) {
-			defer wg.Done()
 			categories, err := fn()
-			mu.Lock()
-			results[src] = categoryResult{source: src, categories: categories, err: err}
-			mu.Unlock()
+			resultCh <- categoryResult{source: src, categories: categories, err: err}
 		}(source)
 	}
-	wg.Wait()
+
+	timer := time.NewTimer(playlistAggregationTimeout)
+	defer timer.Stop()
+	for received := 0; received < pending; received++ {
+		select {
+		case result := <-resultCh:
+			results[result.source] = result
+		case <-timer.C:
+			received = pending
+		}
+	}
 
 	views := make([]playlistCategoryPageSource, 0, len(sources))
 	failed := make([]string, 0)
 	for _, source := range sources {
 		result, ok := results[source]
-		if !ok {
-			continue
-		}
-		if result.err != nil || len(result.categories) == 0 {
+		if !ok || result.err != nil || len(result.categories) == 0 {
 			failed = append(failed, core.GetSourceDescription(source))
 			continue
 		}
@@ -195,7 +201,9 @@ func loadPlaylistCategoryPageSources(sources []string) ([]playlistCategoryPageSo
 	}
 
 	errorMsg := ""
-	if len(views) == 0 {
+	if len(views) == 0 && len(failed) > 0 {
+		errorMsg = "歌单分类加载失败或超时，请稍后重试"
+	} else if len(views) == 0 {
 		errorMsg = "没有可展示的歌单分类"
 	} else if len(failed) > 0 {
 		errorMsg = "部分来源分类加载失败：" + strings.Join(failed, "、")
@@ -284,6 +292,10 @@ func filterAvailableSources(requested, supported []string) []string {
 }
 
 func loadPlaylistSourceTabs(sources []string, fetcher func(string) ([]model.Playlist, error)) ([]playlistSourceTab, string) {
+	return loadPlaylistSourceTabsWithTimeout(sources, fetcher, playlistAggregationTimeout)
+}
+
+func loadPlaylistSourceTabsWithTimeout(sources []string, fetcher func(string) ([]model.Playlist, error), timeout time.Duration) ([]playlistSourceTab, string) {
 	type tabResult struct {
 		source    string
 		playlists []model.Playlist
@@ -291,28 +303,40 @@ func loadPlaylistSourceTabs(sources []string, fetcher func(string) ([]model.Play
 	}
 
 	results := make(map[string]tabResult, len(sources))
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+	resultCh := make(chan tabResult, len(sources))
 	for _, src := range sources {
-		wg.Add(1)
 		go func(s string) {
-			defer wg.Done()
 			pls, err := fetcher(s)
 			for i := range pls {
 				pls[i].Source = s
 			}
-			mu.Lock()
-			results[s] = tabResult{source: s, playlists: pls, err: err}
-			mu.Unlock()
+			resultCh <- tabResult{source: s, playlists: pls, err: err}
 		}(src)
 	}
-	wg.Wait()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for received := 0; received < len(sources); received++ {
+		select {
+		case result := <-resultCh:
+			results[result.source] = result
+		case <-timer.C:
+			received = len(sources)
+		}
+	}
 
 	tabs := make([]playlistSourceTab, 0, len(sources))
 	failed := make([]string, 0)
 	for _, src := range sources {
 		res, ok := results[src]
 		if !ok {
+			name := core.GetSourceDescription(src)
+			tabs = append(tabs, playlistSourceTab{
+				Source: src,
+				Name:   name,
+				Error:  "请求超时，请稍后重试",
+			})
+			failed = append(failed, name)
 			continue
 		}
 		tab := playlistSourceTab{

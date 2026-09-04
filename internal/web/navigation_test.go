@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/guohuiyuan/music-lib/model"
@@ -128,6 +129,36 @@ func TestIndexDoesNotRenderLegacyGlobalPagination(t *testing.T) {
 	}
 }
 
+func TestPlaylistSourceTabsReturnCompletedSourcesAtDeadline(t *testing.T) {
+	started := time.Now()
+	tabs, errMsg := loadPlaylistSourceTabsWithTimeout(
+		[]string{"quick", "slow"},
+		func(source string) ([]model.Playlist, error) {
+			if source == "slow" {
+				time.Sleep(250 * time.Millisecond)
+			}
+			return []model.Playlist{{ID: source + "-playlist"}}, nil
+		},
+		50*time.Millisecond,
+	)
+
+	if elapsed := time.Since(started); elapsed >= 200*time.Millisecond {
+		t.Fatalf("playlist aggregation waited for the slow source: %v", elapsed)
+	}
+	if len(tabs) != 2 {
+		t.Fatalf("tabs = %d, want 2", len(tabs))
+	}
+	if len(tabs[0].Playlists) != 1 || tabs[0].Playlists[0].Source != "quick" {
+		t.Fatalf("completed source was not preserved: %+v", tabs[0])
+	}
+	if tabs[1].Error == "" {
+		t.Fatalf("timed-out source should expose an error: %+v", tabs[1])
+	}
+	if !strings.Contains(errMsg, "部分来源加载失败") {
+		t.Fatalf("error message = %q, want partial failure", errMsg)
+	}
+}
+
 func TestAppJSIncludesAjaxNavigationEntryPoints(t *testing.T) {
 	content, err := templateFS.ReadFile("templates/static/js/app.js")
 	if err != nil {
@@ -246,15 +277,93 @@ func TestUtilityModalsShareCompactStructure(t *testing.T) {
 	}
 }
 
-func TestAjaxNavigationRefreshesRightToolbarMarkup(t *testing.T) {
+func TestPlaylistCategoriesLoadResultsInsideCategoryWorkspace(t *testing.T) {
+	categoryTemplate, err := templateFS.ReadFile("templates/partials/playlist_categories.html")
+	if err != nil {
+		t.Fatalf("ReadFile(playlist_categories.html): %v", err)
+	}
+	gridTemplate, err := templateFS.ReadFile("templates/partials/playlist_grid.html")
+	if err != nil {
+		t.Fatalf("ReadFile(playlist_grid.html): %v", err)
+	}
+	appJS, err := templateFS.ReadFile("templates/static/js/app.js")
+	if err != nil {
+		t.Fatalf("ReadFile(app.js): %v", err)
+	}
+
+	categoryHTML := string(categoryTemplate)
+	for _, want := range []string{
+		`id="category-playlist-results"`,
+		`class="category-panel category-browser-panel"`,
+		`data-category-id="{{ .ID }}"`,
+		`{{template "playlist_grid" .}}`,
+	} {
+		if !strings.Contains(categoryHTML, want) {
+			t.Fatalf("playlist category template missing inline result behavior %q", want)
+		}
+	}
+	if strings.Contains(categoryHTML, `navigateTo(this.href)`) {
+		t.Fatal("playlist category links must not replace the complete workspace")
+	}
+	if !strings.Contains(string(gridTemplate), "loadCategoryPlaylistsPage(") {
+		t.Fatal("category result pagination must update the inline result region")
+	}
+
+	js := string(appJS)
+	for _, want := range []string{
+		`if (link.classList.contains("category-chip"))`,
+		"async function loadCategoryPlaylists(link, options = {})",
+		`nextDoc.getElementById("category-playlist-results")`,
+		"function focusCategoryBrowser()",
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("app.js missing inline category result behavior %q", want)
+		}
+	}
+}
+
+func TestAjaxNavigationUpdatesPersistentReactNavigation(t *testing.T) {
 	content, err := templateFS.ReadFile("templates/static/js/app.js")
 	if err != nil {
 		t.Fatalf("ReadFile(app.js): %v", err)
 	}
 
 	js := string(content)
-	if !strings.Contains(js, "currentToolbar.replaceWith(nextToolbar.cloneNode(true));") {
-		t.Fatal("AJAX navigation must replace the existing right toolbar so conditional pagination markup stays in sync")
+	for _, want := range []string{
+		`currentNavigation.dataset.currentPath = nextNavigation.dataset.currentPath`,
+		`new CustomEvent("musicdl:path-change"`,
+		"function showPendingNavigation(targetURL, options)",
+		"function commitNavigationHistory(targetURL, options)",
+		"async function loadProgressiveSourceNavigation(targetURL, options, controller)",
+		"renderSource(await loadSource(defaultSource));",
+		"await Promise.all(remainingSources.map(async (source) => {",
+		"function mergeProgressiveSourceDocument(nextDoc, sourceOrder)",
+		`progressiveSources: ["netease", "qq", "kugou", "kuwo"]`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("AJAX navigation missing persistent navigation behavior %q", want)
+		}
+	}
+	if strings.Contains(js, "currentNavigation.replaceWith(") {
+		t.Fatal("AJAX navigation should not replace the mounted React navigation root")
+	}
+
+	categoryStart := strings.Index(js, "function goToPlaylistCategories()")
+	if categoryStart < 0 {
+		t.Fatal("app.js missing progressive playlist category navigation")
+	}
+	categoryEnd := strings.Index(js[categoryStart:], "function goToUserPlaylists()")
+	if categoryEnd < 0 {
+		t.Fatal("app.js missing progressive playlist category navigation")
+	}
+	categoryBlock := js[categoryStart : categoryStart+categoryEnd]
+	lastIndex := -1
+	for _, source := range []string{"netease", "qq", "kugou", "kuwo", "migu", "qianqian", "joox", "apple"} {
+		index := strings.Index(categoryBlock, `"`+source+`"`)
+		if index <= lastIndex {
+			t.Fatalf("playlist category source %q is missing or out of order", source)
+		}
+		lastIndex = index
 	}
 }
 

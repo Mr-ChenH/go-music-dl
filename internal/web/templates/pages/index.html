@@ -27,9 +27,11 @@
 
     {{template "playlist_categories" .}}
 
+    {{template "category_playlist_results" .}}
+
     {{template "playlist_source_tabs" .}}
 
-    {{template "playlist_grid" .}}
+    {{if not .PlaylistCategoryCurrent}}{{template "playlist_grid" .}}{{end}}
 
     {{template "song_list" .}}
 </div>

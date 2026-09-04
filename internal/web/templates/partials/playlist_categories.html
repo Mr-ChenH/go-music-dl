@@ -1,33 +1,19 @@
 {{define "playlist_categories"}}
-{{ if .PlaylistCategoryCurrent }}
-    {{ with .PlaylistCategoryCurrent }}
-    <div class="category-current-bar">
-        <div class="category-current-info">
-            <span class="category-current-badge"><i class="fa-solid fa-layer-group"></i> 当前分类</span>
-            <div class="category-current-title">{{ .SourceName }}<span class="category-current-sep">·</span>{{ .CategoryName }}</div>
-            <div class="category-current-subtitle">点击歌单卡片可进入详情，或返回选择其他分类。</div>
-        </div>
-        <a class="btn-pill btn-pill-switch" href="{{$.Root}}/playlist_categories" onclick="event.preventDefault(); navigateTo(this.href)">
-            <i class="fa-solid fa-arrow-left"></i> 返回分类
-        </a>
-    </div>
-    {{ end }}
-{{ end }}
-
 {{ if .PlaylistCategorySources }}
-<section class="category-panel">
+<section class="category-panel category-browser-panel">
     <header class="category-panel-header">
         <div class="category-panel-title">
             <h2><i class="fa-solid fa-table-cells-large"></i> 歌单分类</h2>
-            <p>选择音乐源，挑选喜欢的分类，进入对应歌单列表。</p>
+            <p>先选择平台，再选择分类；歌单会直接显示在下方。</p>
         </div>
     </header>
 
-    <div class="category-source-tabs" role="tablist">
+    <div class="category-source-tabs category-platform-tabs" role="tablist" aria-label="音乐平台">
         {{ range $idx, $src := .PlaylistCategorySources }}
         <button type="button"
             class="category-source-tab{{ if eq $idx 0 }} is-active{{ end }}"
             role="tab"
+            aria-selected="{{ if eq $idx 0 }}true{{ else }}false{{ end }}"
             data-target="category-panel-{{ $src.Source }}"
             onclick="switchCategorySource(this)">
             <span class="category-source-tab-name">{{ $src.Name }}</span>
@@ -44,7 +30,10 @@
                 <div class="category-group-title"><span>{{ .Name }}</span></div>
                 <div class="category-chip-list">
                     {{ range .Categories }}
-                    <a class="category-chip{{ if .Hot }} is-hot{{ end }}" href="{{ .URL }}" onclick="event.preventDefault(); navigateTo(this.href)">
+                    <a class="category-chip{{ if .Hot }} is-hot{{ end }}"
+                       href="{{ .URL }}"
+                       data-source="{{ .Source }}"
+                       data-category-id="{{ .ID }}">
                         <span class="category-chip-name">{{ .Name }}</span>
                         {{ if .Hot }}<span class="category-chip-tag">HOT</span>{{ end }}
                     </a>
@@ -56,5 +45,37 @@
         {{ end }}
     </div>
 </section>
+{{ end }}
+{{end}}
+
+{{define "category_playlist_results"}}
+{{ if .PlaylistCategoryCurrent }}
+<section id="category-playlist-results" class="category-playlist-results" aria-live="polite">
+    {{ with .PlaylistCategoryCurrent }}
+    <header class="category-results-header">
+        <div class="category-results-heading">
+            <span class="category-current-badge"><i class="fa-solid fa-layer-group"></i> {{ .SourceName }}</span>
+            <h2>{{ .CategoryName }}</h2>
+            <p>选择上方其他分类可直接更新这里的歌单。</p>
+        </div>
+        <div class="category-results-actions">
+            <span class="category-results-count">{{ $.TotalCount }} 个歌单</span>
+            <button type="button" class="category-change-button" onclick="focusCategoryBrowser()" title="返回上方选择其他分类">
+                <i class="fa-solid fa-table-cells-large"></i>
+                <span>更换分类</span>
+            </button>
+        </div>
+    </header>
+    {{ end }}
+    {{ if .Error }}
+    <div class="category-source-empty error"><i class="fa-solid fa-circle-exclamation"></i> {{ .Error }}</div>
+    {{ else if not .Playlists }}
+    <div class="category-source-empty"><i class="fa-regular fa-folder-open"></i> 该分类暂无歌单</div>
+    {{ else }}
+    {{template "playlist_grid" .}}
+    {{ end }}
+</section>
+{{ else if .PlaylistCategorySources }}
+<section id="category-playlist-results" class="category-playlist-results" aria-live="polite" hidden></section>
 {{ end }}
 {{end}}
