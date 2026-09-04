@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowClockwise24Regular,
@@ -55,11 +55,14 @@ export function useWorkspaceView() {
 
   useEffect(() => {
     const handleChange = (event) => setView(normalizedView(event.detail || ""));
+    const handlePathChange = () => setView("");
     const handlePopState = () => setView(currentWorkspaceView());
     window.addEventListener("musicdl:workspace-change", handleChange);
+    window.addEventListener("musicdl:path-change", handlePathChange);
     window.addEventListener("popstate", handlePopState);
     return () => {
       window.removeEventListener("musicdl:workspace-change", handleChange);
+      window.removeEventListener("musicdl:path-change", handlePathChange);
       window.removeEventListener("popstate", handlePopState);
     };
   }, []);
@@ -102,19 +105,19 @@ function EmptyState({ icon: Icon, title, detail, action }) {
 
 function DownloadRecordsPage({ apiRoot }) {
   const [page, setPage] = useState(1);
-  const [data, setData] = useState({ records: [], total: 0, total_pages: 1 });
+  const [data, setData] = useState({ records: [], playlist_tasks: [], total: 0, total_pages: 1 });
   const [state, setState] = useState("loading");
   const [error, setError] = useState("");
 
-  const load = useCallback(async (targetPage = page) => {
-    setState("loading");
+  const load = useCallback(async (targetPage = page, silent = false) => {
+    if (!silent) setState("loading");
     setError("");
     try {
       const params = new URLSearchParams({ page: String(targetPage), page_size: String(DOWNLOAD_PAGE_SIZE) });
       const response = await fetch(`${apiRoot}/api/downloads/records?${params}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const next = await response.json();
-      setData({ ...next, records: next.records || [] });
+      setData({ ...next, records: next.records || [], playlist_tasks: next.playlist_tasks || [] });
       setPage(Math.max(1, Number(next.page || targetPage)));
       setState("ready");
     } catch (reason) {
@@ -125,10 +128,19 @@ function DownloadRecordsPage({ apiRoot }) {
 
   useEffect(() => { load(1); }, [apiRoot]);
   useEffect(() => {
-    const refresh = () => load(1);
+    const refresh = () => load(1, true);
     window.addEventListener("musicdl:workspace-refresh", refresh);
     return () => window.removeEventListener("musicdl:workspace-refresh", refresh);
   }, [load]);
+  const hasActivePlaylistTask = (data.playlist_tasks || []).some((task) => ["queued", "resolving", "downloading"].includes(task.status));
+  useEffect(() => {
+    if (!hasActivePlaylistTask) return undefined;
+    const timer = window.setInterval(() => load(1, true), 2000);
+    return () => window.clearInterval(timer);
+  }, [hasActivePlaylistTask, load]);
+  useEffect(() => {
+    window.setDownloadRecordsButtonState?.(hasActivePlaylistTask ? "downloading" : "idle");
+  }, [hasActivePlaylistTask]);
 
   const clear = async () => {
     if (!window.confirm("确定清空所有下载记录？此操作不可撤销。")) return;
@@ -149,6 +161,14 @@ function DownloadRecordsPage({ apiRoot }) {
     };
   }, [data.records]);
 
+  const playlistTasks = data.playlist_tasks || [];
+  const openLocalPlaylist = (collectionID) => {
+    if (!collectionID) return;
+    const url = `${apiRoot}/collection?id=${encodeURIComponent(collectionID)}`;
+    if (typeof window.navigateTo === "function") window.navigateTo(url);
+    else window.location.href = url;
+  };
+
   return (
     <section className="workspace-view" aria-label="下载记录">
       <div className="workspace-view-toolbar">
@@ -165,9 +185,43 @@ function DownloadRecordsPage({ apiRoot }) {
         </div>
       </div>
 
+      {playlistTasks.length ? (
+        <section className="playlist-download-tasks" aria-label="歌单下载任务">
+          <header><div><strong>歌单下载</strong><span>完成后自动保存到“我的歌单”</span></div><span>{playlistTasks.length} 个任务</span></header>
+          <div className="playlist-download-task-list">{playlistTasks.map((task) => {
+            const total = Math.max(0, Number(task.total || 0));
+            const completed = Math.max(0, Number(task.completed || 0));
+            const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+            const statusMeta = {
+              queued: ["等待中", "is-queued"],
+              resolving: ["解析歌单", "is-running"],
+              downloading: ["下载中", "is-running"],
+              completed: ["已完成", "is-success"],
+              partial: ["部分完成", "is-warning"],
+              failed: ["失败", "is-error"],
+            }[task.status] || [task.status || "未知", "is-error"];
+            return <article className="playlist-download-task" key={task.id}>
+              <div className="playlist-task-main">
+                <div className="playlist-task-title"><strong>{task.playlist_name || "未命名歌单"}</strong><span className="source-badge">{task.source || "-"}</span></div>
+                <div className="playlist-task-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
+                <div className="playlist-task-detail">
+                  <span>{task.current_song || (task.status === "queued" ? "等待前一个任务完成" : total > 0 ? `${completed} / ${total}` : "正在读取歌曲列表")}</span>
+                  {task.error ? <span className="is-error">{task.error}</span> : null}
+                </div>
+              </div>
+              <div className="playlist-task-stats">
+                <span className={`activity-status ${statusMeta[1]}`}>{statusMeta[0]}</span>
+                <small>成功 {task.success || 0}</small><small>跳过 {task.skipped || 0}</small><small>失败 {task.failed || 0}</small>
+                {task.local_collection_id ? <button type="button" className="workspace-command" onClick={() => openLocalPlaylist(task.local_collection_id)}><FolderOpen24Regular />打开歌单</button> : null}
+              </div>
+            </article>;
+          })}</div>
+        </section>
+      ) : null}
+
       {state === "loading" ? <div className="workspace-loading">正在读取下载记录</div> : null}
       {state === "error" ? <div className="workspace-inline-error">加载失败：{error}</div> : null}
-      {state === "ready" && !data.records.length ? <EmptyState icon={History24Regular} title="暂无下载记录" detail="下载任务完成后会显示在这里" /> : null}
+      {state === "ready" && !data.records.length && !playlistTasks.length ? <EmptyState icon={History24Regular} title="暂无下载记录" detail="下载任务完成后会显示在这里" /> : null}
       {data.records.length ? (
         <div className="activity-table-wrap">
           <table className="activity-table">
@@ -175,7 +229,7 @@ function DownloadRecordsPage({ apiRoot }) {
             <tbody>{data.records.map((record, index) => {
               const status = record.Status === "success" ? "成功" : record.Status === "skipped" ? "跳过" : "失败";
               return <tr key={`${record.CreatedAt || "record"}-${index}`} title={record.Error || ""}>
-                <td data-label="歌曲"><strong>{record.Name || "-"}</strong></td>
+                <td data-label="歌曲"><strong>{record.Name || "-"}</strong>{record.PlaylistName ? <small className="record-playlist-name">{record.PlaylistName}</small> : null}</td>
                 <td data-label="歌手">{record.Artist || "-"}</td>
                 <td data-label="来源"><span className="source-badge">{record.Source || "-"}</span></td>
                 <td data-label="状态"><span className={`activity-status is-${record.Status || "failed"}`}>{status}</span></td>
@@ -291,9 +345,13 @@ function playerSnapshot() {
     duration,
     volume: Number(audio?.volume ?? 0.7),
     rate: Number(audio?.playbackRate || window.playerSpeed || 1),
+    activeLyric,
     lyrics: lyricNodes
-      .slice(Math.max(0, activeLyric - 1), activeLyric < 0 ? 3 : activeLyric + 2)
-      .map((node) => ({ text: node.textContent || "", active: node.classList.contains("aplayer-lrc-current") }))
+      .map((node, index) => ({
+        index,
+        text: node.textContent || "",
+        active: node.classList.contains("aplayer-lrc-current"),
+      }))
       .filter((line) => line.text.trim().toLowerCase() !== "not available"),
   };
 }
@@ -330,6 +388,7 @@ export function MiniPlayer({ hidden = false }) {
 
 function NowPlayingPage() {
   const [snapshot, setSnapshot] = useState(playerSnapshot);
+  const lyricsScrollRef = useRef(null);
 
   useEffect(() => {
     const update = () => setSnapshot(playerSnapshot());
@@ -342,6 +401,18 @@ function NowPlayingPage() {
       ["play", "pause", "loadedmetadata", "durationchange", "volumechange"].forEach((event) => audio?.removeEventListener(event, update));
     };
   }, []);
+
+  useEffect(() => {
+    const container = lyricsScrollRef.current;
+    const activeLine = container?.querySelector('[data-active="true"]');
+    if (!container || !activeLine) return;
+    const top = activeLine.offsetTop
+      - (container.clientHeight - activeLine.offsetHeight) / 2;
+    container.scrollTo({
+      top: Math.max(0, top),
+      behavior: "smooth",
+    });
+  }, [snapshot.activeLyric, snapshot.current?.custom_id, snapshot.current?.id]);
 
   const player = window.ap;
   const current = snapshot.current;
@@ -389,8 +460,12 @@ function NowPlayingPage() {
             </div>
 
             <section className="lyrics-panel player-main-lyrics" aria-label="实时歌词">
-              <header><h2>实时歌词</h2><span>LYRICS</span></header>
-              <div>{snapshot.lyrics.length ? snapshot.lyrics.map((line, index) => <p className={line.active ? "is-active" : ""} key={`${line.text}-${index}`}>{line.text || " "}</p>) : <p className="lyrics-unavailable">暂无歌词</p>}</div>
+              <header><h2>实时歌词</h2><span>{snapshot.lyrics.length ? `${snapshot.lyrics.length} 行` : "LYRICS"}</span></header>
+              <div className="player-lyrics-scroll" ref={lyricsScrollRef}>
+                {snapshot.lyrics.length
+                  ? snapshot.lyrics.map((line) => <p className={line.active ? "is-active" : ""} data-active={line.active ? "true" : undefined} key={`${line.index}-${line.text}`}>{line.text || " "}</p>)
+                  : <p className="lyrics-unavailable">暂无歌词</p>}
+              </div>
             </section>
           </div>
 

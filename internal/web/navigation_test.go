@@ -2,7 +2,9 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -277,6 +279,41 @@ func TestUtilityModalsShareCompactStructure(t *testing.T) {
 	}
 }
 
+func TestPlaylistNavigationSeparatesLocalAndPlatformCollections(t *testing.T) {
+	gridTemplate, err := templateFS.ReadFile("templates/partials/playlist_grid.html")
+	if err != nil {
+		t.Fatalf("ReadFile(playlist_grid.html): %v", err)
+	}
+	searchTemplate, err := templateFS.ReadFile("templates/partials/search_box.html")
+	if err != nil {
+		t.Fatalf("ReadFile(search_box.html): %v", err)
+	}
+	reactBundle, err := templateFS.ReadFile("templates/static/react/react-app.js")
+	if err != nil {
+		t.Fatalf("ReadFile(react-app.js): %v", err)
+	}
+
+	grid := string(gridTemplate)
+	for _, want := range []string{"我的歌单", "新建歌单", "平台歌单", "showEditCollectionModal()", "goToUserPlaylists()"} {
+		if !strings.Contains(grid, want) {
+			t.Fatalf("local playlist workspace missing %q", want)
+		}
+	}
+	search := string(searchTemplate)
+	if !strings.Contains(search, `onclick="openCollectionManager()">我的歌单`) {
+		t.Fatal("fallback navigation must open local collections from 我的歌单")
+	}
+	if !strings.Contains(search, `onclick="goToUserPlaylists()">平台歌单`) {
+		t.Fatal("fallback navigation must label cloud collections as 平台歌单")
+	}
+	bundle := string(reactBundle)
+	for _, want := range []string{"我的歌单", "平台歌单", "/my_collections"} {
+		if !strings.Contains(bundle, want) {
+			t.Fatalf("React navigation bundle missing %q", want)
+		}
+	}
+}
+
 func TestPlaylistCategoriesLoadResultsInsideCategoryWorkspace(t *testing.T) {
 	categoryTemplate, err := templateFS.ReadFile("templates/partials/playlist_categories.html")
 	if err != nil {
@@ -346,6 +383,17 @@ func TestAjaxNavigationUpdatesPersistentReactNavigation(t *testing.T) {
 	}
 	if strings.Contains(js, "currentNavigation.replaceWith(") {
 		t.Fatal("AJAX navigation should not replace the mounted React navigation root")
+	}
+	syncStart := strings.Index(js, "function syncReactNavigationMount(nextDoc, currentContainer)")
+	syncEnd := strings.Index(js[syncStart:], "const MIN_VISIBLE_RESULTS_PX")
+	if syncStart < 0 || syncEnd < 0 {
+		t.Fatal("app.js missing complete React navigation synchronization block")
+	}
+	syncBlock := js[syncStart : syncStart+syncEnd]
+	mountIndex := strings.Index(syncBlock, "window.mountMusicDlReact(document)")
+	pathEventIndex := strings.Index(syncBlock, `new CustomEvent("musicdl:path-change"`)
+	if mountIndex < 0 || pathEventIndex < 0 || mountIndex > pathEventIndex {
+		t.Fatal("AJAX navigation must mount the new React workspace before broadcasting its path change")
 	}
 
 	categoryStart := strings.Index(js, "function goToPlaylistCategories()")
@@ -718,6 +766,132 @@ func TestAppToastFitsMobileViewport(t *testing.T) {
 	} {
 		if !strings.Contains(css, want) {
 			t.Fatalf("style.css missing mobile-safe toast rule %q", want)
+		}
+	}
+}
+
+func TestNowPlayingWorkspaceRendersScrollableFullLyrics(t *testing.T) {
+	bundle, err := templateFS.ReadFile("templates/static/react/react-app.js")
+	if err != nil {
+		t.Fatalf("ReadFile(react-app.js): %v", err)
+	}
+	js := string(bundle)
+	for _, want := range []string{"player-lyrics-scroll", "data-active", "实时歌词"} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("React player bundle missing full lyric behavior %q", want)
+		}
+	}
+}
+
+func TestContentListsOwnVerticalScrolling(t *testing.T) {
+	cssContent, err := templateFS.ReadFile("templates/static/css/style.css")
+	if err != nil {
+		t.Fatalf("ReadFile(style.css): %v", err)
+	}
+	css := string(cssContent)
+	for _, want := range []string{
+		"body.content-list-scroll-active { overflow-y: hidden; }",
+		"max-height: var(--content-list-max-height",
+		"overflow-y: auto;",
+		"overscroll-behavior-y: contain;",
+	} {
+		if !strings.Contains(css, want) {
+			t.Fatalf("content list scrolling CSS missing %q", want)
+		}
+	}
+
+	appContent, err := templateFS.ReadFile("templates/static/js/app.js")
+	if err != nil {
+		t.Fatalf("ReadFile(app.js): %v", err)
+	}
+	js := string(appContent)
+	for _, want := range []string{
+		"function syncContentListScrollRegions()",
+		`document.body.classList.toggle("content-list-scroll-active", regions.length > 0)`,
+		`window.addEventListener("resize", syncContentListScrollRegions)`,
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("content list scrolling behavior missing %q", want)
+		}
+	}
+}
+
+func TestContentListsUseTypeSpecificDefaultPageSizes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	playlists := make([]model.Playlist, 13)
+	for i := range playlists {
+		playlists[i] = model.Playlist{ID: fmt.Sprintf("playlist-%d", i), Name: fmt.Sprintf("Playlist %d", i), Source: "qq"}
+	}
+	songs := make([]model.Song, 31)
+	for i := range songs {
+		songs[i] = model.Song{ID: fmt.Sprintf("song-%d", i), Name: fmt.Sprintf("Song %d", i), Source: "qq"}
+	}
+
+	router := gin.New()
+	router.SetHTMLTemplate(newTestTemplate(t))
+	router.GET("/playlists", func(c *gin.Context) {
+		renderIndex(c, nil, playlists, "", nil, "", "playlist", "", "", "", false, "", nil)
+	})
+	router.GET("/playlist-songs", func(c *gin.Context) {
+		renderIndex(c, songs, nil, "", nil, "", "playlist", "remote", "", "", false, "", nil)
+	})
+	router.GET("/local-songs", func(c *gin.Context) {
+		renderIndex(c, songs, nil, "", nil, "", "local_music", "", "", "", false, "", nil)
+	})
+
+	for _, test := range []struct {
+		path     string
+		pageSize int
+	}{
+		{path: "/playlists", pageSize: defaultPlaylistPageSize},
+		{path: "/playlist-songs", pageSize: defaultLocalMusicPageSize},
+		{path: "/local-songs", pageSize: defaultLocalMusicPageSize},
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, test.path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200", test.path, rec.Code)
+		}
+		want := fmt.Sprintf(`data-page-size="%d"`, test.pageSize)
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("GET %s missing type-specific pagination %s", test.path, want)
+		}
+	}
+}
+
+func TestPlaylistSourceTabsExposeIndependentPagination(t *testing.T) {
+	content, err := templateFS.ReadFile("templates/partials/playlist_source_tabs.html")
+	if err != nil {
+		t.Fatalf("ReadFile(playlist_source_tabs.html): %v", err)
+	}
+
+	html := string(content)
+	for _, want := range []string{
+		`data-playlist-source-panel="true"`,
+		`data-page-size="12"`,
+		`data-playlist-page-item="true"`,
+		`class="pagination-bar playlist-source-pagination"`,
+		`data-source-panel="playlist-tabs-{{ $tabsData.ID }}-{{ $tab.Source }}"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("playlist source tabs missing pagination contract %q", want)
+		}
+	}
+
+	appContent, err := templateFS.ReadFile("templates/static/js/app.js")
+	if err != nil {
+		t.Fatalf("ReadFile(app.js): %v", err)
+	}
+	js := string(appContent)
+	for _, want := range []string{
+		"function renderPlaylistSourcePage(panel, requestedPage)",
+		"function initializePlaylistSourcePagination(root = document)",
+		"function changePlaylistSourcePage(panelId, page)",
+		"sourcePanel: paginationBar.dataset.sourcePanel",
+	} {
+		if !strings.Contains(js, want) {
+			t.Fatalf("app.js missing playlist source pagination behavior %q", want)
 		}
 	}
 }

@@ -143,6 +143,37 @@ body.player-lyrics-unavailable .aplayer.aplayer-fixed .aplayer-lrc { display: no
 .workspace-empty-state strong { font-size: 16px; font-weight: 650; }
 .workspace-empty-state p { margin: 5px 0 18px; color: var(--fluent-muted); font-size: 12px; }
 
+.playlist-download-tasks { border-bottom: 1px solid var(--fluent-stroke); background: rgba(235, 243, 252, 0.28); }
+.playlist-download-tasks > header { min-height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--fluent-stroke); }
+.playlist-download-tasks > header > div { display: grid; gap: 2px; }
+.playlist-download-tasks > header strong { color: var(--fluent-text); font-size: 14px; font-weight: 650; }
+.playlist-download-tasks > header span { color: var(--fluent-muted); font-size: 10px; }
+.playlist-download-task-list { display: grid; }
+.playlist-download-task { min-height: 94px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 12px 16px; border-bottom: 1px solid #ededed; }
+.playlist-download-task:last-child { border-bottom: 0; }
+.playlist-task-main { min-width: 0; display: grid; gap: 7px; }
+.playlist-task-title { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.playlist-task-title strong { overflow: hidden; color: var(--fluent-text); font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.playlist-task-progress { height: 5px; overflow: hidden; border-radius: 3px; background: #e5e5e5; }
+.playlist-task-progress > span { height: 100%; display: block; border-radius: inherit; background: var(--fluent-blue); transition: width 250ms ease; }
+.playlist-task-detail { min-width: 0; display: flex; justify-content: space-between; gap: 12px; color: var(--fluent-muted); font-size: 10px; }
+.playlist-task-detail span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playlist-task-detail .is-error { color: #a4262c; }
+.playlist-task-stats { display: flex; align-items: center; gap: 8px; }
+.playlist-task-stats small { color: var(--fluent-muted); font-size: 10px; white-space: nowrap; }
+.playlist-task-stats .workspace-command { min-height: 32px; padding: 5px 8px; }
+.activity-status.is-queued { border-color: #c8c6c4; background: #f5f5f5; color: #605e5c; }
+.activity-status.is-running { border-color: #8fc3f4; background: #ebf3fc; color: #0f548c; }
+.activity-status.is-warning { border-color: #f2c661; background: #fff8e8; color: #8a5700; }
+.activity-status.is-error { border-color: #e37d80; background: #fdf3f4; color: #a4262c; }
+.record-playlist-name { display: block; margin-top: 3px; overflow: hidden; color: var(--fluent-subtle); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.legacy-playlist-task-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.legacy-playlist-task { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--fluent-stroke); border-radius: 6px; background: #f5f9fd; }
+.legacy-playlist-task > div { display: flex; justify-content: space-between; gap: 12px; }
+.legacy-playlist-task strong { overflow: hidden; color: var(--fluent-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.legacy-playlist-task span, .legacy-playlist-task small { color: var(--fluent-muted); font-size: 10px; }
+.legacy-playlist-task progress { width: 100%; height: 5px; accent-color: var(--fluent-blue); }
+
 .activity-table-wrap { width: 100%; overflow-x: auto; }
 .activity-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 13px; }
 .activity-table th { padding: 11px 14px; border-bottom: 1px solid var(--fluent-stroke); background: #f5f5f5; color: var(--fluent-muted); font-size: 11px; font-weight: 600; text-align: left; }
@@ -240,6 +271,10 @@ body.player-lyrics-unavailable .aplayer.aplayer-fixed .aplayer-lrc { display: no
   .activity-summary strong { font-size: 17px; }
   .workspace-toolbar-actions { width: 100%; }
   .workspace-toolbar-actions .workspace-command { flex: 1; }
+  .playlist-download-task { grid-template-columns: 1fr; gap: 10px; padding: 12px; }
+  .playlist-task-stats { flex-wrap: wrap; }
+  .playlist-task-stats .workspace-command { margin-left: auto; }
+  .playlist-task-detail { display: grid; gap: 3px; }
 
   .activity-table, .activity-table tbody, .activity-table tr, .activity-table td { display: block; }
   .activity-table thead { display: none; }

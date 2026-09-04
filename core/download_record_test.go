@@ -46,6 +46,24 @@ func TestDownloadDedupIndexUsesSQLiteAndSurvivesHistoryClear(t *testing.T) {
 	}
 }
 
+func TestDownloadRecordStoresPlaylistTaskContext(t *testing.T) {
+	baseDir := t.TempDir()
+	t.Setenv("MUSIC_DL_CONFIG_DB", filepath.Join(baseDir, "settings.db"))
+	resetConfigStateForTest()
+	t.Cleanup(resetConfigStateForTest)
+
+	if err := SaveDownloadRecordForTask(42, "Road Trip", "Track", "Artist", "qq", DownloadStatusSuccess, ""); err != nil {
+		t.Fatalf("SaveDownloadRecordForTask: %v", err)
+	}
+	records, err := GetDownloadRecords()
+	if err != nil {
+		t.Fatalf("GetDownloadRecords: %v", err)
+	}
+	if len(records) != 1 || records[0].TaskID != 42 || records[0].PlaylistName != "Road Trip" {
+		t.Fatalf("record task context = %#v, want task 42 and playlist name", records)
+	}
+}
+
 func TestGetDownloadRecordPageReturnsStablePagesAndTotal(t *testing.T) {
 	baseDir := t.TempDir()
 	t.Setenv("MUSIC_DL_CONFIG_DB", filepath.Join(baseDir, "settings.db"))

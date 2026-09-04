@@ -191,6 +191,9 @@ func InitDB() {
 	if err := db.AutoMigrate(&Collection{}, &SavedSong{}, &LocalMusicIndex{}); err != nil {
 		panic("Failed to migrate database: " + err.Error())
 	}
+	if err := initPlaylistDownloadTasks(); err != nil {
+		panic("Failed to initialize playlist download tasks: " + err.Error())
+	}
 
 	if err := migrateLegacyFavorites(dbPath); err != nil {
 		panic("Failed to migrate legacy favorites database: " + err.Error())
@@ -609,7 +612,7 @@ func RegisterCollectionRoutes(api *gin.RouterGroup) {
 	api.GET("/my_collections", func(c *gin.Context) {
 		var collections []Collection
 		if err := db.Order("id DESC").Find(&collections).Error; err != nil {
-			renderIndex(c, nil, nil, "我的本地歌单", nil, "获取本地歌单失败", "playlist", "", "", "", true, "", nil)
+			renderIndex(c, nil, nil, "我的歌单", nil, "获取我的歌单失败", "playlist", "", "", "", true, "", nil)
 			return
 		}
 
@@ -618,7 +621,7 @@ func RegisterCollectionRoutes(api *gin.RouterGroup) {
 			playlists = append(playlists, collection.playlistCard())
 		}
 
-		renderIndex(c, nil, playlists, "我的本地歌单", nil, "", "playlist", "", "", "", true, "", nil)
+		renderIndex(c, nil, playlists, "我的歌单", nil, "", "playlist", "", "", "", true, "", nil)
 	})
 
 	api.GET("/collection", func(c *gin.Context) {

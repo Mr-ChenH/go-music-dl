@@ -209,6 +209,11 @@ func playlistDetailURL(root string, searchType string, playlist model.Playlist) 
 	return fmt.Sprintf("%s/%s?%s", root, route, values.Encode())
 }
 
+const (
+	defaultPlaylistPageSize   = 12
+	defaultLocalMusicPageSize = 30
+)
+
 func renderIndex(c *gin.Context, songs []model.Song, playlists []model.Playlist, q string, selected []string, errMsg string, searchType string, playlistLink string, colID string, colName string, isLocalColPage bool, collectionKind string, importCollection *importCollectionMeta) {
 	allSrc := core.GetAllSourceNames()
 	desc := make(map[string]string)
@@ -250,9 +255,17 @@ func renderIndex(c *gin.Context, songs []model.Song, playlists []model.Playlist,
 		defaultPageSize = core.DefaultWebPageSize
 	}
 	pageSize := defaultPageSize
-	if raw := strings.TrimSpace(c.Query("page_size")); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+	rawPageSize := strings.TrimSpace(c.Query("page_size"))
+	if rawPageSize != "" {
+		if n, err := strconv.Atoi(rawPageSize); err == nil && n > 0 {
 			pageSize = n
+		}
+	} else {
+		switch {
+		case len(playlists) > 0:
+			pageSize = defaultPlaylistPageSize
+		case searchType == "local_music", playlistLink != "", colID != "":
+			pageSize = defaultLocalMusicPageSize
 		}
 	}
 	if pageSize > 500 {
@@ -474,6 +487,7 @@ func StartWithOptions(port string, opts StartOptions) {
 	})
 
 	RegisterMusicRoutes(api, configAPI)
+	RegisterPlaylistDownloadRoutes(api)
 	RegisterQRLoginRoutes(configAPI)
 	RegisterCollectionRoutes(api)
 	RegisterLocalMusicRoutes(api)

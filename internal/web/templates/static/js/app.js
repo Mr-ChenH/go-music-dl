@@ -1185,6 +1185,8 @@ function initializePageContent(root = document) {
   bindSearchForm(root);
   bindSongSortControls(root);
   bindSongListTools(root);
+  initializePlaylistSourcePagination(root);
+  syncContentListScrollRegions();
 
   const initialTypeEl = root.querySelector('input[name="type"]:checked');
   if (initialTypeEl) {
@@ -1299,17 +1301,19 @@ function syncReactNavigationMount(nextDoc, currentContainer) {
   if (currentNavigation) {
     currentNavigation.dataset.root = nextNavigation.dataset.root || currentNavigation.dataset.root;
     currentNavigation.dataset.currentPath = nextNavigation.dataset.currentPath || window.location.pathname;
-    window.dispatchEvent(
-      new CustomEvent("musicdl:path-change", {
-        detail: currentNavigation.dataset.currentPath,
-      }),
-    );
   } else if (currentContainer) {
     currentContainer.before(nextNavigation.cloneNode(true));
   }
   if (typeof window.mountMusicDlReact === "function") {
     window.mountMusicDlReact(document);
   }
+  const mountedNavigation = document.querySelector("#react-navigation-root");
+  const currentPath = mountedNavigation?.dataset.currentPath || nextNavigation.dataset.currentPath || window.location.pathname;
+  window.dispatchEvent(
+    new CustomEvent("musicdl:path-change", {
+      detail: currentPath,
+    }),
+  );
   bindAuthFloat();
   refreshAuthFloat();
 }
@@ -1478,6 +1482,8 @@ function mergeProgressiveSourceDocument(nextDoc, sourceOrder) {
     currentTabs.append(tab);
     currentPanels.append(panel);
   }
+  initializePlaylistSourcePagination(panel);
+  syncContentListScrollRegions();
   return true;
 }
 
@@ -1690,6 +1696,7 @@ function getActivePaginationState() {
     currentPage,
     totalPages,
     pageSize: parsePositiveInt(paginationBar.dataset.pageSize, 20),
+    sourcePanel: paginationBar.dataset.sourcePanel || "",
     isCategoryResults: Boolean(paginationBar.closest("#category-playlist-results")),
   };
 }
@@ -1719,7 +1726,9 @@ function handlePaginationShortcut(event) {
   if (nextPage < 1 || nextPage > state.totalPages) return;
 
   event.preventDefault();
-  if (state.isCategoryResults) {
+  if (state.sourcePanel) {
+    changePlaylistSourcePage(state.sourcePanel, nextPage);
+  } else if (state.isCategoryResults) {
     loadCategoryPlaylistsPage(nextPage, state.pageSize);
   } else {
     goToPage(nextPage, state.pageSize);
@@ -1795,6 +1804,7 @@ function bindPageNavigationEvents() {
   );
 
   document.addEventListener("keydown", handlePaginationShortcut);
+  window.addEventListener("resize", syncContentListScrollRegions);
   document.addEventListener("keydown", handlePlaybackShortcut);
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") closeSongListTools();
@@ -2055,6 +2065,87 @@ function loadCategoryPlaylistsPage(page, pageSize) {
   return navigateTo(url.toString());
 }
 
+function syncContentListScrollRegions() {
+  const regions = Array.from(
+    document.querySelectorAll(
+      ".playlist-grid-container, .playlist-tabs-grid, .result-list",
+    ),
+  );
+  document.body.classList.toggle("content-list-scroll-active", regions.length > 0);
+  if (!regions.length) return;
+
+  const bottomInset = window.innerWidth <= 760 ? 244 : 140;
+  regions.forEach((region) => {
+    if (region.offsetParent === null) return;
+    const availableHeight = Math.max(
+      180,
+      Math.floor(window.innerHeight - region.getBoundingClientRect().top - bottomInset),
+    );
+    region.style.setProperty("--content-list-max-height", `${availableHeight}px`);
+  });
+}
+
+function renderPlaylistSourcePage(panel, requestedPage) {
+  if (!panel) return;
+  const cards = Array.from(panel.querySelectorAll("[data-playlist-page-item]"));
+  const pageSize = Math.min(
+    parsePositiveInt(panel.dataset.pageSize, DEFAULT_WEB_PAGE_SIZE),
+    500,
+  );
+  const total = cards.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(1, parsePositiveInt(requestedPage, 1)), totalPages);
+  const pageStart = (page - 1) * pageSize;
+  const pageEnd = Math.min(pageStart + pageSize, total);
+
+  cards.forEach((card, index) => {
+    card.hidden = index < pageStart || index >= pageEnd;
+  });
+  panel.dataset.currentPage = String(page);
+
+  const bar = panel.querySelector(".playlist-source-pagination");
+  if (!bar) return;
+  bar.dataset.currentPage = String(page);
+  bar.dataset.totalPages = String(totalPages);
+  bar.dataset.pageSize = String(pageSize);
+  bar.dataset.totalCount = String(total);
+  bar.hidden = totalPages <= 1;
+  if (totalPages <= 1) {
+    bar.replaceChildren();
+    return;
+  }
+
+  bar.innerHTML = `
+    <button type="button" class="ctrl-btn primary" onclick="changePlaylistSourcePage('${panel.id}', ${page - 1})" ${page <= 1 ? "disabled" : ""}>
+      <i class="fa-solid fa-chevron-left"></i> 上一页
+    </button>
+    <span class="pagination-text">第 ${page} / ${totalPages} 页 · 共 ${total} 个歌单</span>
+    <span class="pagination-shortcut-hint">PgUp / PgDn</span>
+    <button type="button" class="ctrl-btn primary" onclick="changePlaylistSourcePage('${panel.id}', ${page + 1})" ${page >= totalPages ? "disabled" : ""}>
+      下一页 <i class="fa-solid fa-chevron-right"></i>
+    </button>`;
+}
+
+function initializePlaylistSourcePagination(root = document) {
+  const panels = [];
+  if (root?.matches?.("[data-playlist-source-panel]")) panels.push(root);
+  if (root && typeof root.querySelectorAll === "function") {
+    panels.push(...root.querySelectorAll("[data-playlist-source-panel]"));
+  }
+  panels.forEach((panel) => {
+    renderPlaylistSourcePage(panel, panel.dataset.currentPage || 1);
+  });
+}
+
+function changePlaylistSourcePage(panelId, page) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return false;
+  renderPlaylistSourcePage(panel, page);
+  syncContentListScrollRegions();
+  panel.scrollIntoView({ behavior: "auto", block: "start" });
+  return true;
+}
+
 function switchCategorySource(tab) {
   if (!tab) return;
   const panelId = tab.getAttribute("data-target");
@@ -2067,7 +2158,12 @@ function switchCategorySource(tab) {
     t.setAttribute("aria-selected", active ? "true" : "false");
   });
   scope.querySelectorAll(".category-source-panel").forEach(function (p) {
-    p.classList.toggle("is-active", p.id === panelId);
+    const active = p.id === panelId;
+    p.classList.toggle("is-active", active);
+    if (active) {
+      renderPlaylistSourcePage(p, p.dataset.currentPage || 1);
+      syncContentListScrollRegions();
+    }
   });
   if (changed) clearCategoryPlaylistResults();
 }
@@ -2141,9 +2237,6 @@ function changePageSize(size) {
     // 更新工具栏的 pageSize 数据
     const toolbar = document.getElementById("batch-toolbar");
     if (toolbar) toolbar.dataset.pageSize = String(size);
-    // 也更新 webSettings 中的值
-    webSettings.webPageSize = parseInt(size, 10);
-    persistWebSettingsCache();
     void loadLocalMusicPage(1, { updateHistory: true, scroll: true });
     return;
   }
@@ -2342,8 +2435,9 @@ function getCurrentLocalMusicPage() {
 }
 
 function getLocalMusicPageSize() {
+  const toolbar = document.getElementById("batch-toolbar");
   return Math.min(
-    parsePositiveInt(webSettings.webPageSize, DEFAULT_WEB_PAGE_SIZE),
+    parsePositiveInt(toolbar?.dataset.pageSize, 30),
     200,
   );
 }
@@ -2510,24 +2604,27 @@ function ensureLocalMusicPaginationBar() {
   return bar;
 }
 
-function renderLocalMusicPagePagination(page, totalPages) {
+function renderLocalMusicPagePagination(page, totalPages, total) {
   const bar = ensureLocalMusicPaginationBar();
   if (!bar) return;
+  bar.dataset.currentPage = String(page);
+  bar.dataset.totalPages = String(totalPages);
+  bar.dataset.pageSize = String(getLocalMusicPageSize());
+  bar.dataset.totalCount = String(total);
   if (totalPages <= 1) {
+    bar.hidden = true;
     bar.style.display = "none";
-    bar.dataset.currentPage = String(page);
-    bar.dataset.totalPages = String(totalPages);
+    bar.replaceChildren();
     return;
   }
 
   bar.style.display = "flex";
-  bar.dataset.currentPage = String(page);
-  bar.dataset.totalPages = String(totalPages);
+  bar.hidden = false;
   bar.innerHTML = `
         <button type="button" class="ctrl-btn primary" onclick="goToPage(${page - 1})" ${page <= 1 ? "disabled" : ""}>
             <i class="fa-solid fa-chevron-left"></i> 上一页
         </button>
-        <span class="pagination-text">第 ${page} / ${totalPages} 页</span>
+        <span class="pagination-text">第 ${page} / ${totalPages} 页 · 共 ${total} 首</span>
         <span class="pagination-shortcut-hint">PgUp / PgDn</span>
         <button type="button" class="ctrl-btn primary" onclick="goToPage(${page + 1})" ${page >= totalPages ? "disabled" : ""}>
             下一页 <i class="fa-solid fa-chevron-right"></i>
@@ -2538,6 +2635,7 @@ function renderLocalMusicPagePagination(page, totalPages) {
 function updateLocalMusicPageURL(page, replace = false) {
   const url = new URL(window.location.href);
   url.searchParams.set("page", String(page));
+  url.searchParams.set("page_size", String(getLocalMusicPageSize()));
   if (replace) {
     window.history.replaceState(null, "", url.toString());
   } else {
@@ -2606,7 +2704,7 @@ async function loadLocalMusicPage(page = 1, options = {}) {
       setLocalMusicPageHint("");
     }
 
-    renderLocalMusicPagePagination(targetPage, totalPages);
+    renderLocalMusicPagePagination(targetPage, totalPages, total);
     refreshDownloadLinks(list);
     bindSongSortControls(list);
     bindSongCardCovers(list);
@@ -3812,6 +3910,7 @@ async function loadDownloadRecordsPage(page = 1) {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     const records = data.records || [];
+    const playlistTasks = data.playlist_tasks || [];
     activeDownloadRecordsPage = Math.max(1, parsePositiveInt(data.page, 1));
     const total = Math.max(0, parsePositiveInt(data.total, 0));
     const totalPages = Math.max(1, parsePositiveInt(data.total_pages, 1));
@@ -3823,12 +3922,29 @@ async function loadDownloadRecordsPage(page = 1) {
       countEl.textContent = `共 ${total} 条  ·  本页成功 ${success}  ·  跳过 ${skipped}  ·  失败 ${failed}`;
     }
 
-    if (records.length === 0) {
+    if (records.length === 0 && playlistTasks.length === 0) {
       if (listEl) listEl.innerHTML = '<div class="download-records-empty"><div><i class="fa-regular fa-clock"></i><br>暂无下载记录</div></div>';
       return;
     }
 
-    let html = `<table class="download-records-table">
+    let html = "";
+    if (playlistTasks.length > 0) {
+      html += '<div class="legacy-playlist-task-list">';
+      for (const task of playlistTasks) {
+        const total = Math.max(0, parsePositiveInt(task.total, 0));
+        const completed = Math.max(0, parsePositiveInt(task.completed, 0));
+        const percent = total > 0 ? Math.min(100, Math.round(completed / total * 100)) : 0;
+        const label = task.status === "completed" ? "已完成" : task.status === "partial" ? "部分完成" : task.status === "failed" ? "失败" : task.status === "downloading" ? "下载中" : task.status === "resolving" ? "解析歌单" : "等待中";
+        html += `<div class="legacy-playlist-task">
+          <div><strong>${escapeHtml(task.playlist_name || "未命名歌单")}</strong><span>${escapeHtml(label)} · ${completed}/${total || "-"}</span></div>
+          <progress max="100" value="${percent}"></progress>
+          <small>${escapeHtml(task.current_song || task.error || `成功 ${task.success || 0}，跳过 ${task.skipped || 0}，失败 ${task.failed || 0}`)}</small>
+        </div>`;
+      }
+      html += "</div>";
+    }
+
+    if (records.length > 0) html += `<table class="download-records-table">
       <thead><tr>
         <th>歌曲</th>
         <th>歌手</th>
@@ -3854,7 +3970,7 @@ async function loadDownloadRecordsPage(page = 1) {
       </tr>`;
     }
 
-    html += "</tbody></table>";
+    if (records.length > 0) html += "</tbody></table>";
     if (listEl) listEl.innerHTML = html;
     if (paginationEl) {
       paginationEl.innerHTML = renderUtilityModalPagination(
@@ -7291,6 +7407,55 @@ function setImportCollectionButtonState(btn, imported) {
   } else {
     btn.innerHTML = '<i class="fa-solid fa-download"></i> 导入本地';
     btn.style.opacity = "";
+  }
+}
+
+async function startPlaylistDownloadFromButton(btn) {
+  if (!btn || btn.disabled) return;
+  const payload = {
+    name: btn.dataset.name || "",
+    description: btn.dataset.description || "",
+    cover: btn.dataset.cover || "",
+    creator: btn.dataset.creator || "",
+    track_count: parsePositiveInt(btn.dataset.trackCount, 0),
+    source: btn.dataset.source || "",
+    external_id: btn.dataset.externalId || "",
+    link: btn.dataset.link || "",
+  };
+  if (!payload.name || !payload.source || !payload.external_id) {
+    showToast("无法下载歌单", "缺少歌单名称、来源或 ID。", "warning");
+    return;
+  }
+
+  const countText = payload.track_count > 0 ? `（约 ${payload.track_count} 首）` : "";
+  if (!confirm(`确认下载歌单《${payload.name}》${countText}？\n下载完成后会自动创建到“我的歌单”。`)) return;
+
+  const originalHTML = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 已加入';
+  try {
+    const response = await fetch(`${API_ROOT}/api/downloads/playlists`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.error) {
+      throw new Error(result.error || `HTTP ${response.status}`);
+    }
+
+    setDownloadRecordsButtonState("downloading");
+    showToast("歌单下载已加入队列", `《${payload.name}》会在后台下载并自动创建本地歌单。`, "success");
+    if (typeof window.openMusicDlWorkspace === "function") {
+      window.openMusicDlWorkspace("downloads");
+      window.dispatchEvent(new CustomEvent("musicdl:workspace-refresh"));
+    } else {
+      openDownloadRecordsModal();
+    }
+  } catch (error) {
+    btn.disabled = false;
+    btn.innerHTML = originalHTML;
+    showToast("歌单下载创建失败", error?.message || "请稍后重试。", "warning");
   }
 }
 

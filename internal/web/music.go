@@ -155,6 +155,61 @@ func playlistCategorySourcesFromQuery(c *gin.Context) []string {
 
 const playlistAggregationTimeout = 5 * time.Second
 
+const (
+	kugouRecommendCacheTTL   = 10 * time.Minute
+	kugouRecommendStaleLimit = 24 * time.Hour
+)
+
+var kugouRecommendCache = struct {
+	sync.RWMutex
+	playlists []model.Playlist
+	fetchedAt time.Time
+}{}
+
+func clonePlaylists(playlists []model.Playlist) []model.Playlist {
+	return append([]model.Playlist(nil), playlists...)
+}
+
+func loadKugouRecommendedPlaylists(fetcher func() ([]model.Playlist, error)) ([]model.Playlist, error) {
+	return loadKugouRecommendedPlaylistsWithRetry(fetcher, []time.Duration{100 * time.Millisecond, 300 * time.Millisecond}, time.Now())
+}
+
+func loadKugouRecommendedPlaylistsWithRetry(fetcher func() ([]model.Playlist, error), retryDelays []time.Duration, now time.Time) ([]model.Playlist, error) {
+	kugouRecommendCache.RLock()
+	cached := clonePlaylists(kugouRecommendCache.playlists)
+	fetchedAt := kugouRecommendCache.fetchedAt
+	kugouRecommendCache.RUnlock()
+
+	if len(cached) > 0 && now.Sub(fetchedAt) <= kugouRecommendCacheTTL {
+		return cached, nil
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= len(retryDelays); attempt++ {
+		playlists, err := fetcher()
+		if err == nil && len(playlists) > 0 {
+			kugouRecommendCache.Lock()
+			kugouRecommendCache.playlists = clonePlaylists(playlists)
+			kugouRecommendCache.fetchedAt = now
+			kugouRecommendCache.Unlock()
+			return playlists, nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("酷狗音乐返回了空的推荐歌单")
+		}
+		if attempt < len(retryDelays) && retryDelays[attempt] > 0 {
+			time.Sleep(retryDelays[attempt])
+		}
+	}
+
+	if len(cached) > 0 && now.Sub(fetchedAt) <= kugouRecommendStaleLimit {
+		return cached, nil
+	}
+	return nil, lastErr
+}
+
 func loadPlaylistCategoryPageSources(sources []string) ([]playlistCategoryPageSource, string) {
 	type categoryResult struct {
 		source     string
@@ -386,6 +441,9 @@ func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 			if fn == nil {
 				return nil, fmt.Errorf("该源不支持推荐歌单")
 			}
+			if src == "kugou" {
+				return loadKugouRecommendedPlaylists(fn)
+			}
 			return fn()
 		})
 		c.Set("PlaylistSourceTabs", playlistSourceTabsData{
@@ -410,8 +468,8 @@ func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 		})
 		c.Set("PlaylistSourceTabs", playlistSourceTabsData{
 			ID:       "user-playlists",
-			Icon:     "fa-heart",
-			Title:    "我收藏的歌单",
+			Icon:     "fa-cloud",
+			Title:    "平台歌单",
 			Subtitle: "查看已登录平台中你创建和收藏的歌单，未登录的渠道请先在设置中扫码登录。",
 			Empty:    "该渠道暂无个人歌单，或未登录。",
 			Tabs:     tabs,
@@ -1204,17 +1262,30 @@ func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 		if records == nil {
 			records = []core.DownloadRecord{}
 		}
+		tasks, taskErr := listPlaylistDownloadTasks(20)
+		if taskErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": taskErr.Error()})
+			return
+		}
+		if tasks == nil {
+			tasks = []PlaylistDownloadTask{}
+		}
 		c.JSON(200, gin.H{
-			"records":     records,
-			"page":        page,
-			"page_size":   pageSize,
-			"total":       total,
-			"total_pages": totalPages,
+			"records":        records,
+			"playlist_tasks": tasks,
+			"page":           page,
+			"page_size":      pageSize,
+			"total":          total,
+			"total_pages":    totalPages,
 		})
 	})
 
 	configAPI.DELETE("/api/downloads/records", func(c *gin.Context) {
 		if err := core.ClearDownloadRecords(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if err := clearFinishedPlaylistDownloadTasks(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

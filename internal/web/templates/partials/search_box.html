@@ -35,10 +35,10 @@
         </div>
         <div class="quick-actions">
             <button type="button" class="btn-pill btn-pill-primary" onclick="goToRecommend()">每日推荐歌单</button>
-            <button type="button" class="btn-pill btn-pill-fav" onclick="openCollectionManager()">本地歌单</button>
+            <button type="button" class="btn-pill btn-pill-fav" onclick="openCollectionManager()">我的歌单</button>
             <button type="button" class="btn-pill btn-pill-fav" onclick="openLocalMusicPage()">本地音乐</button>
             <button type="button" class="btn-pill btn-pill-category" onclick="goToPlaylistCategories()">歌单分类</button>
-            <button type="button" class="btn-pill btn-pill-mine" onclick="goToUserPlaylists()">我的歌单</button>
+            <button type="button" class="btn-pill btn-pill-mine" onclick="goToUserPlaylists()">平台歌单</button>
         </div>
         {{if .Error}}<div class="error-msg">{{.Error}}</div>{{end}}
         <div class="source-selector" id="source-selector">

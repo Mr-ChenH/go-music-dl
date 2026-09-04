@@ -68,12 +68,14 @@ function SearchConsole({ node }) {
   const showSearchTools = !workspaceView && (path === data.root || path === `${data.root}/` || path.includes("/search"));
   const routeWorkspace = path.includes("/local_music_page")
     ? { group: "资料库", title: "本地音乐" }
-    : path.includes("/collections") || path.includes("/collection")
-      ? { group: "资料库", title: data.collectionName || "本地歌单" }
+    : path.includes("/my_collections")
+      ? { group: "资料库", title: "我的歌单" }
+      : path.includes("/collections") || path.includes("/collection")
+      ? { group: "资料库", title: data.collectionName || "我的歌单" }
       : path.includes("/playlist_categories") || path.includes("/category_playlists")
         ? { group: "发现", title: "歌单分类" }
         : path.includes("/user_playlists")
-          ? { group: "发现", title: "我的歌单" }
+          ? { group: "发现", title: "平台歌单" }
           : path.includes("/recommend")
             ? { group: "发现", title: "每日推荐" }
             : path.includes("/album")
@@ -274,12 +276,12 @@ function AppNavigation({ node }) {
           <NavButton label="搜索与发现" icon={Search24Regular} onClick={goHome} active={!workspaceView && (path === `${data.root}/` || path === data.root || isPath("/search"))} />
           <NavButton label="每日推荐" icon={Sparkle24Regular} onClick={go("goToRecommend")} active={!workspaceView && isPath("/recommend")} />
           <NavButton label="歌单分类" icon={Grid24Regular} onClick={go("goToPlaylistCategories")} active={!workspaceView && isPath("/playlist_categories", "/category_playlists")} />
-          <NavButton label="我的歌单" icon={Heart24Regular} onClick={go("goToUserPlaylists")} active={!workspaceView && isPath("/user_playlists")} />
+          <NavButton label="平台歌单" icon={FolderOpen24Regular} onClick={go("goToUserPlaylists")} active={!workspaceView && isPath("/user_playlists")} />
         </section>
 
         <section className="nav-group">
           <h2>资料库</h2>
-          <NavButton label="本地歌单" icon={FolderOpen24Regular} onClick={go("openCollectionManager")} active={!workspaceView && isPath("/collections", "/collection")} />
+          <NavButton label="我的歌单" icon={Heart24Regular} onClick={go("openCollectionManager")} active={!workspaceView && isPath("/my_collections", "/collections", "/collection")} />
           <NavButton label="本地音乐" icon={MusicNote224Regular} onClick={go("openLocalMusicPage")} active={!workspaceView && isPath("/local_music_page")} />
         </section>
 
@@ -307,7 +309,7 @@ function AppNavigation({ node }) {
         <NavButton label="正在播放" icon={MusicNote224Regular} onClick={goWorkspace("player")} active={workspaceView === "player"} />
         <NavButton label="本地音乐" icon={FolderOpen24Regular} onClick={go("openLocalMusicPage")} active={!workspaceView && isPath("/local_music_page")} />
         <NavButton label="下载" icon={History24Regular} onClick={goWorkspace("downloads")} active={workspaceView === "downloads"} />
-        <NavButton label="更多" icon={MoreHorizontal24Regular} onClick={() => setMoreOpen((value) => !value)} active={moreOpen || workspaceView === "history" || (!workspaceView && isPath("/recommend", "/playlist_categories", "/category_playlists", "/user_playlists", "/collections", "/collection"))} />
+        <NavButton label="更多" icon={MoreHorizontal24Regular} onClick={() => setMoreOpen((value) => !value)} active={moreOpen || workspaceView === "history" || (!workspaceView && isPath("/recommend", "/playlist_categories", "/category_playlists", "/user_playlists", "/my_collections", "/collections", "/collection"))} />
       </nav>
 
       {moreOpen ? (
@@ -316,8 +318,8 @@ function AppNavigation({ node }) {
           <div className="mobile-more-grid">
             <NavButton label="每日推荐" icon={Sparkle24Regular} onClick={go("goToRecommend")} />
             <NavButton label="歌单分类" icon={Grid24Regular} onClick={go("goToPlaylistCategories")} />
-            <NavButton label="我的歌单" icon={Heart24Regular} onClick={go("goToUserPlaylists")} />
-            <NavButton label="本地歌单" icon={FolderOpen24Regular} onClick={go("openCollectionManager")} />
+            <NavButton label="我的歌单" icon={Heart24Regular} onClick={go("openCollectionManager")} />
+            <NavButton label="平台歌单" icon={FolderOpen24Regular} onClick={go("goToUserPlaylists")} />
             <NavButton label="播放历史" icon={Clock24Regular} onClick={goWorkspace("history")} />
             <NavButton label="系统设置" icon={Settings24Regular} onClick={go("openSystemConfig")} />
             <NavButton label="账户" icon={Person24Regular} onClick={go("openSystemConfig")} />

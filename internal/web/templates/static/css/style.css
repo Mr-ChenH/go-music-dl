@@ -287,6 +287,22 @@ body.batch-mode .song-card { padding-left: 10px; }
 
 .result-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 15px; }
 
+body.content-list-scroll-active { overflow-y: hidden; }
+.playlist-grid-container,
+.playlist-tabs-grid,
+.result-list {
+    max-height: var(--content-list-max-height, calc(100dvh - 320px));
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+.playlist-grid-container,
+.playlist-tabs-grid { align-content: start; padding-right: 6px; }
+.result-list { padding-right: 6px; }
+
 .song-card { background: #fff; padding: 15px; border-radius: 16px; box-shadow: var(--shadow); display: flex; align-items: center; transition: all 0.2s ease; position: relative; z-index: 5; border: 2px solid transparent; }
 .song-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-active); }
 .song-card.playing-active { border-color: #0f6cbd; background: #eff3ff; transform: scale(1.01); box-shadow: 0 8px 20px rgba(15, 108, 189, 0.25); }
@@ -1566,9 +1582,9 @@ body.karaoke-lyrics-active .aplayer .aplayer-lrc p.aplayer-lrc-current {
     .category-chip-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .category-chip { min-width: 0; justify-content: center; padding: 9px 6px; font-size: 12px; white-space: nowrap; overflow: hidden; }
     .category-chip-name { overflow: hidden; text-overflow: ellipsis; }
-    .result-list { padding: 0 12px; gap: 12px; }
-    .playlist-grid-container { padding: 0 12px; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-    .playlist-tabs-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .result-list { padding: 0 6px 0 12px; gap: 12px; }
+    .playlist-grid-container { padding: 0 6px 0 12px; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .playlist-tabs-grid { padding-right: 6px; grid-template-columns: repeat(2, 1fr); gap: 12px; }
     .playlist-tabs-panel { margin: 0 12px 18px; padding: 14px 12px; }
     .category-source-empty { padding: 18px 12px; font-size: 12px; }
     .cookie-input-row { flex-direction: column; align-items: stretch; gap: 6px; }

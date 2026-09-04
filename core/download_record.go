@@ -17,13 +17,15 @@ const (
 
 // DownloadRecord keeps the user-visible download history in SQLite.
 type DownloadRecord struct {
-	ID        uint      `gorm:"primaryKey"`
-	Name      string    `gorm:"size:512;not null;index"`
-	Artist    string    `gorm:"size:512;not null;index"`
-	Source    string    `gorm:"size:64;not null"`
-	Status    string    `gorm:"size:32;not null;index"`
-	Error     string    `gorm:"size:1024"`
-	CreatedAt time.Time `gorm:"autoCreateTime;index"`
+	ID           uint      `gorm:"primaryKey"`
+	TaskID       uint      `gorm:"index"`
+	PlaylistName string    `gorm:"size:512;index"`
+	Name         string    `gorm:"size:512;not null;index"`
+	Artist       string    `gorm:"size:512;not null;index"`
+	Source       string    `gorm:"size:64;not null"`
+	Status       string    `gorm:"size:32;not null;index"`
+	Error        string    `gorm:"size:1024"`
+	CreatedAt    time.Time `gorm:"autoCreateTime;index"`
 }
 
 // DownloadDedupEntry is intentionally separate from the visible history. Clearing
@@ -45,6 +47,10 @@ func initDownloadRecordTable() error {
 // SaveDownloadRecord persists one download outcome and records successful songs in
 // the durable de-duplication index. Control characters are removed before writing.
 func SaveDownloadRecord(name, artist, source, status, errStr string) error {
+	return SaveDownloadRecordForTask(0, "", name, artist, source, status, errStr)
+}
+
+func SaveDownloadRecordForTask(taskID uint, playlistName, name, artist, source, status, errStr string) error {
 	if err := initDownloadRecordTable(); err != nil {
 		return err
 	}
@@ -52,11 +58,13 @@ func SaveDownloadRecord(name, artist, source, status, errStr string) error {
 	name = cleanDownloadRecordText(name)
 	artist = cleanDownloadRecordText(artist)
 	record := DownloadRecord{
-		Name:   name,
-		Artist: artist,
-		Source: cleanDownloadRecordText(source),
-		Status: cleanDownloadRecordText(status),
-		Error:  cleanDownloadRecordText(errStr),
+		TaskID:       taskID,
+		PlaylistName: cleanDownloadRecordText(playlistName),
+		Name:         name,
+		Artist:       artist,
+		Source:       cleanDownloadRecordText(source),
+		Status:       cleanDownloadRecordText(status),
+		Error:        cleanDownloadRecordText(errStr),
 	}
 
 	return configDB.Transaction(func(tx *gorm.DB) error {
@@ -225,9 +233,13 @@ func DownloadWithDedupCheck(song *model.Song, outDir string, withCover, withLyri
 }
 
 func DownloadWithDedupCheckWithTemplate(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet map[string]struct{}) (*DownloadedSong, error) {
+	return DownloadWithDedupCheckForTask(song, outDir, withCover, withLyrics, filenameTemplate, dedupSet, 0, "")
+}
+
+func DownloadWithDedupCheckForTask(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet map[string]struct{}, taskID uint, playlistName string) (*DownloadedSong, error) {
 	key := SongKey(song)
 	if IsSongDownloaded(song, dedupSet) {
-		_ = SaveDownloadRecord(song.Name, song.Artist, song.Source, DownloadStatusSkipped, "")
+		_ = SaveDownloadRecordForTask(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusSkipped, "")
 		return &DownloadedSong{Skipped: true, Filename: key}, nil
 	}
 
@@ -241,11 +253,11 @@ func DownloadWithDedupCheckWithTemplate(song *model.Song, outDir string, withCov
 		result, dlErr = SaveSongToFileWithTemplate(song, outDir, withCover, withLyrics, filenameTemplate)
 	}
 	if dlErr != nil {
-		_ = SaveDownloadRecord(song.Name, song.Artist, song.Source, DownloadStatusFailed, dlErr.Error())
+		_ = SaveDownloadRecordForTask(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusFailed, dlErr.Error())
 		return result, dlErr
 	}
 
-	_ = SaveDownloadRecord(song.Name, song.Artist, song.Source, DownloadStatusSuccess, "")
+	_ = SaveDownloadRecordForTask(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusSuccess, "")
 	if dedupSet != nil {
 		dedupSet[key] = struct{}{}
 	}

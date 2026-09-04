@@ -1,13 +1,29 @@
 {{define "playlist_grid"}}
 {{ if .IsLocalColPage }}
-    <div class="list-header" style="margin-bottom: 20px;">
-        <div>
-            <span class="result-count" style="font-size: 16px;"><i class="fa-solid fa-folder-open"></i> 本地歌单（共 {{ len .Playlists }} 个）</span>
+    <div class="list-header local-playlist-header">
+        <div class="local-playlist-heading">
+            <span class="result-count"><i class="fa-solid fa-heart"></i> 我的歌单（共 {{ .TotalCount }} 个）</span>
+            <p>创建自己的歌单并收藏歌曲；数据保存在当前 music-dl 中，不会同步到音乐平台。</p>
         </div>
+        <div class="local-playlist-actions">
+            <button type="button" class="btn-pill" onclick="goToUserPlaylists()">
+                <i class="fa-solid fa-cloud"></i> 平台歌单
+            </button>
+            <button type="button" class="btn-pill btn-pill-primary" onclick="showEditCollectionModal()">
+                <i class="fa-solid fa-plus"></i> 新建歌单
+            </button>
+        </div>
+    </div>
+    {{ if not .Playlists }}
+    <div class="local-playlist-empty">
+        <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+        <strong>还没有我的歌单</strong>
+        <span>新建一个歌单，然后从搜索结果或本地音乐中收藏歌曲。</span>
         <button type="button" class="btn-pill btn-pill-primary" onclick="showEditCollectionModal()">
             <i class="fa-solid fa-plus"></i> 新建歌单
         </button>
     </div>
+    {{ end }}
 {{ end }}
 
 {{ if .Playlists }}
@@ -77,21 +93,39 @@
                         </button>
                     </div>
                     {{ else if or (eq $.SearchType "playlist") (eq $.SearchType "album") }}
-                    <button type="button"
-                            class="ctrl-btn primary"
-                            title="{{ if eq $.SearchType "album" }}导入到本地歌单列表，保存为外部导入专辑；仅保留元数据，不保存具体歌曲明细。{{ else }}导入到本地歌单列表，保存为外部导入歌单；仅保留元数据，不保存具体歌曲明细。{{ end }}"
-                            data-name="{{.Name}}"
-                            data-description="{{.Description}}"
-                            data-cover="{{.Cover}}"
-                            data-creator="{{.Creator}}"
-                            data-track-count="{{.TrackCount}}"
-                            data-source="{{.Source}}"
-                            data-external-id="{{.ID}}"
-                            data-link="{{.Link}}"
-                            data-content-type="{{$.SearchType}}"
-                            onclick="event.stopPropagation(); importCollectionFromButton(this)">
-                        <i class="fa-solid fa-download"></i> 导入本地
-                    </button>
+                    <div class="playlist-card-command-group">
+                        {{ if eq $.SearchType "playlist" }}
+                        <button type="button"
+                                class="ctrl-btn playlist-download-button"
+                                title="下载歌单并自动创建我的歌单"
+                                data-name="{{.Name}}"
+                                data-description="{{.Description}}"
+                                data-cover="{{.Cover}}"
+                                data-creator="{{.Creator}}"
+                                data-track-count="{{.TrackCount}}"
+                                data-source="{{.Source}}"
+                                data-external-id="{{.ID}}"
+                                data-link="{{.Link}}"
+                                onclick="event.stopPropagation(); startPlaylistDownloadFromButton(this)">
+                            <i class="fa-solid fa-cloud-arrow-down"></i> 下载
+                        </button>
+                        {{ end }}
+                        <button type="button"
+                                class="ctrl-btn primary"
+                                title="{{ if eq $.SearchType "album" }}导入到本地歌单列表，保存为外部导入专辑；仅保留元数据，不保存具体歌曲明细。{{ else }}导入到本地歌单列表，保存为外部导入歌单；仅保留元数据，不保存具体歌曲明细。{{ end }}"
+                                data-name="{{.Name}}"
+                                data-description="{{.Description}}"
+                                data-cover="{{.Cover}}"
+                                data-creator="{{.Creator}}"
+                                data-track-count="{{.TrackCount}}"
+                                data-source="{{.Source}}"
+                                data-external-id="{{.ID}}"
+                                data-link="{{.Link}}"
+                                data-content-type="{{$.SearchType}}"
+                                onclick="event.stopPropagation(); importCollectionFromButton(this)">
+                            <i class="fa-solid fa-download"></i> 导入
+                        </button>
+                    </div>
                     {{ end }}
                 </div>
             </div>
@@ -103,6 +137,7 @@
          data-current-page="{{ .Page }}"
          data-total-pages="{{ .TotalPages }}"
          data-page-size="{{ .PageSize }}"
+         data-total-count="{{ .TotalCount }}"
          data-shortcut-hint="PgUp / PgDn"
          title="Shortcut: PgUp / PgDn">
         {{ if $.PlaylistCategoryCurrent }}
@@ -114,7 +149,7 @@
             <i class="fa-solid fa-chevron-left"></i> 上一页
         </button>
         {{ end }}
-        <span class="pagination-text">第 {{ .Page }} / {{ .TotalPages }} 页</span>
+        <span class="pagination-text">第 {{ .Page }} / {{ .TotalPages }} 页 · 共 {{ .TotalCount }} 个歌单</span>
         <span class="pagination-shortcut-hint">PgUp / PgDn</span>
         {{ if $.PlaylistCategoryCurrent }}
         <button type="button" class="ctrl-btn primary" onclick="loadCategoryPlaylistsPage({{ .Page }} + 1, {{ .PageSize }})" {{ if ge .Page .TotalPages }}disabled{{ end }}>
