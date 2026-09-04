@@ -2,11 +2,11 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   build: {
     outDir: resolve(__dirname, "../internal/web/templates/static/react"),
-    emptyOutDir: true,
+    emptyOutDir: mode !== "development",
     cssCodeSplit: false,
     rollupOptions: {
       input: resolve(__dirname, "src/main.jsx"),
@@ -17,4 +17,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

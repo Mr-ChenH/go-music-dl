@@ -1,0 +1,20 @@
+[tools]
+go = "1.25.1"
+node = "24"
+watchexec = "2.7.0"
+
+[tasks.setup]
+description = "Install frontend dependencies"
+run = "npm --prefix webui install"
+
+[tasks.frontend]
+description = "Build the React frontend continuously"
+run = "npm --prefix webui run dev"
+
+[tasks.backend]
+description = "Run the Go web server and restart it when embedded assets change"
+run = "watchexec --shell=none --restart --debounce 500ms --project-origin . --watch ./cmd --watch ./core --watch ./internal --exts go,html,css,js -- go run ./cmd/music-dl web --no-browser --port 8080"
+
+[tasks.dev]
+description = "Run the frontend watcher and Go web server"
+depends = ["frontend", "backend"]
