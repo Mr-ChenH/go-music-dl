@@ -1186,6 +1186,7 @@ function initializePageContent(root = document) {
   bindSongSortControls(root);
   bindSongListTools(root);
   initializePlaylistSourcePagination(root);
+  syncCategoryBrowserResultsMode();
   syncContentListScrollRegions();
 
   const initialTypeEl = root.querySelector('input[name="type"]:checked');
@@ -2027,11 +2028,24 @@ async function loadCategoryPlaylists(link, options = {}) {
 
     const renderedResults = nextResults.cloneNode(true);
     currentResults.replaceWith(renderedResults);
+    commitNavigationHistory(targetURL, {
+      historyMode: options.historyMode || "push",
+    });
+    setCategoryBrowserResultsMode(true);
     initializePageContent(renderedResults);
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+      if (window.innerWidth <= 760) {
         const top = window.scrollY + renderedResults.getBoundingClientRect().top - 12;
         window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+      requestAnimationFrame(() => {
+        syncContentListScrollRegions();
+        renderedResults.querySelector(".category-playlist-grid")?.scrollTo({
+          top: 0,
+          behavior: "auto",
+        });
       });
     });
     return true;
@@ -2046,10 +2060,35 @@ async function loadCategoryPlaylists(link, options = {}) {
   }
 }
 
+function setCategoryBrowserResultsMode(active) {
+  const browser = document.querySelector(".category-browser-panel");
+  if (!browser) return;
+  browser.classList.toggle("is-results-active", Boolean(active));
+  browser.setAttribute("aria-hidden", active ? "true" : "false");
+}
+
+function syncCategoryBrowserResultsMode() {
+  const results = document.getElementById("category-playlist-results");
+  const hasRenderedResults = Boolean(
+    results && !results.hidden && results.children.length > 0,
+  );
+  setCategoryBrowserResultsMode(hasRenderedResults);
+}
+
 function focusCategoryBrowser() {
-  document.querySelector(".category-browser-panel")?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
+  const browser = document.querySelector(".category-browser-panel");
+  if (!browser) {
+    const root = String(window.API_ROOT || "/music").replace(/\/$/, "");
+    navigateTo(`${root}/playlist_categories`);
+    return;
+  }
+  setCategoryBrowserResultsMode(false);
+  requestAnimationFrame(() => {
+    syncContentListScrollRegions();
+    browser.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   });
 }
 
@@ -2074,14 +2113,34 @@ function syncContentListScrollRegions() {
   document.body.classList.toggle("content-list-scroll-active", regions.length > 0);
   if (!regions.length) return;
 
-  const bottomInset = window.innerWidth <= 760 ? 244 : 140;
+  const mobileLayout = window.innerWidth <= 760;
+  const mobileNavigation = mobileLayout ? document.querySelector(".app-sidebar") : null;
+  const mobileBoundary = mobileNavigation?.getBoundingClientRect().top;
   regions.forEach((region) => {
     if (region.offsetParent === null) return;
-    const availableHeight = Math.max(
-      180,
-      Math.floor(window.innerHeight - region.getBoundingClientRect().top - bottomInset),
+    let availableHeight;
+    if (mobileLayout && Number.isFinite(mobileBoundary)) {
+      const pagination = region.nextElementSibling?.matches?.(".pagination-bar")
+        ? region.nextElementSibling
+        : null;
+      const paginationStyle = pagination ? window.getComputedStyle(pagination) : null;
+      const paginationReserve = pagination
+        ? pagination.getBoundingClientRect().height
+          + Number.parseFloat(paginationStyle?.marginTop || "0")
+          + Number.parseFloat(paginationStyle?.marginBottom || "0")
+        : 0;
+      availableHeight = Math.floor(
+        mobileBoundary - 12 - region.getBoundingClientRect().top - paginationReserve,
+      );
+    } else {
+      availableHeight = Math.floor(
+        window.innerHeight - region.getBoundingClientRect().top - 140,
+      );
+    }
+    region.style.setProperty(
+      "--content-list-max-height",
+      `${Math.max(180, availableHeight)}px`,
     );
-    region.style.setProperty("--content-list-max-height", `${availableHeight}px`);
   });
 }
 
@@ -3241,7 +3300,10 @@ function handleQRLoginSuccess(result) {
   const input = document.getElementById(
     `cookie-${qrLoginCookieSource(qrLoginState.source)}`,
   );
-  if (input && cookie) input.value = cookie;
+  if (input && cookie) {
+    input.value = cookie;
+    syncPlatformAccountRows();
+  }
   setQRLoginStatus("登录成功，Cookie 已保存", "success");
   showToast(
     "扫码登录成功",
@@ -4336,7 +4398,89 @@ async function openLatestUpdatePage(target = "download") {
   openClientExternalURL(url, popup);
 }
 
-async function openSystemConfig() {
+const settingsSectionMeta = {
+  accounts: ["平台账户", "登录凭据与连接状态"],
+  downloads: ["系统设置", "下载、文件与同步"],
+  playback: ["系统设置", "播放与列表行为"],
+  application: ["系统设置", "应用功能与版本"],
+};
+
+function switchSettingsSection(section = "downloads") {
+  const target = settingsSectionMeta[section] ? section : "downloads";
+  document.querySelectorAll(".settings-navigation-item").forEach((button) => {
+    const active = button.dataset.settingsTarget === target;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  document.querySelectorAll(".settings-page").forEach((page) => {
+    page.classList.toggle("is-active", page.dataset.settingsSection === target);
+  });
+  const [title, subtitle] = settingsSectionMeta[target];
+  const titleElement = document.getElementById("settings-dialog-title");
+  const subtitleElement = document.getElementById("settings-dialog-subtitle");
+  if (titleElement) titleElement.textContent = title;
+  if (subtitleElement) subtitleElement.textContent = subtitle;
+  document.querySelector(".settings-pages")?.scrollTo({ top: 0, behavior: "auto" });
+}
+
+function closeSystemConfig() {
+  const modal = document.getElementById("cookieModal");
+  if (modal) modal.style.display = "none";
+  document.body.classList.remove("settings-dialog-open");
+}
+
+function filterPlatformAccounts(query = "") {
+  const normalized = String(query).trim().toLowerCase();
+  let visible = 0;
+  document.querySelectorAll(".platform-account-row").forEach((row) => {
+    const haystack = `${row.dataset.platformSource || ""} ${row.dataset.platformName || ""}`.toLowerCase();
+    const matches = !normalized || haystack.includes(normalized);
+    row.hidden = !matches;
+    if (matches) visible += 1;
+  });
+  const empty = document.getElementById("platform-filter-empty");
+  if (empty) empty.hidden = visible > 0;
+}
+
+function syncPlatformAccountRows(sortRows = false) {
+  const list = document.querySelector(".platform-account-list");
+  const rows = Array.from(document.querySelectorAll(".platform-account-row"));
+  let connectedCount = 0;
+  rows.forEach((row) => {
+    const input = row.querySelector('input[id^="cookie-"]');
+    const connected = Boolean(String(input?.value || "").trim());
+    row.classList.toggle("is-connected", connected);
+    row.dataset.connected = connected ? "1" : "0";
+    const status = row.querySelector(".platform-account-status span");
+    if (status) status.textContent = connected ? "已连接" : "未连接";
+    if (connected) connectedCount += 1;
+  });
+  if (sortRows && list) {
+    rows
+      .sort((left, right) => {
+        const connectionOrder = Number(right.dataset.connected || 0) - Number(left.dataset.connected || 0);
+        if (connectionOrder) return connectionOrder;
+        return String(left.dataset.platformName || left.dataset.platformSource || "")
+          .localeCompare(String(right.dataset.platformName || right.dataset.platformSource || ""), "zh-CN");
+      })
+      .forEach((row) => list.append(row));
+  }
+  const count = document.getElementById("platform-connected-count");
+  if (count) count.textContent = String(connectedCount);
+}
+
+function togglePlatformCookieVisibility(button) {
+  const input = button?.closest(".platform-cookie-field")?.querySelector("input");
+  if (!input) return;
+  const visible = input.type === "text";
+  input.type = visible ? "password" : "text";
+  button.title = visible ? "显示 Cookie" : "隐藏 Cookie";
+  button.setAttribute("aria-label", button.title);
+  const icon = button.querySelector("i");
+  if (icon) icon.className = visible ? "fa-regular fa-eye" : "fa-regular fa-eye-slash";
+}
+
+async function openSystemConfig(section = "downloads") {
   const modal = document.getElementById("cookieModal");
   try {
     const [cookiesResponse, settingsResponse] = await Promise.all([
@@ -4350,23 +4494,49 @@ async function openSystemConfig() {
       throw new Error("加载系统配置失败");
     }
     applyWebSettings(settings);
+    document.querySelectorAll('input[id^="cookie-"]').forEach((input) => {
+      input.value = "";
+      input.type = "password";
+    });
     for (const [k, v] of Object.entries(cookies || {})) {
       const el = document.getElementById(`cookie-${k}`);
       if (el) el.value = v;
     }
+    syncPlatformAccountRows(true);
+    filterPlatformAccounts(document.getElementById("platform-account-filter")?.value || "");
+    switchSettingsSection(section);
+    const saveStatus = document.getElementById("settings-save-status");
+    if (saveStatus) saveStatus.textContent = "";
     setAuthFloatLoggedIn(true);
-    if (modal) modal.style.display = "flex";
+    if (modal) {
+      modal.style.display = "flex";
+      if (modal.dataset.dismissBound !== "1") {
+        modal.dataset.dismissBound = "1";
+        modal.addEventListener("click", (event) => {
+          if (event.target === modal) closeSystemConfig();
+        });
+      }
+    }
+    document.body.classList.add("settings-dialog-open");
   } catch (error) {
     applyWebSettings(webSettings);
     showToast("系统配置加载失败", error.message || "请稍后重试", "error");
   }
 }
 
+function openPlatformAccountSettings() {
+  openSystemConfig("accounts");
+}
+
 function openCookieModal() {
-  openSystemConfig();
+  openSystemConfig("accounts");
 }
 
 async function saveCookies() {
+  const saveButton = document.getElementById("settings-save-button");
+  const saveStatus = document.getElementById("settings-save-status");
+  if (saveButton) saveButton.disabled = true;
+  if (saveStatus) saveStatus.textContent = "正在保存";
   const webPageSizeInput = document.getElementById("setting-web-page-size");
   const cliPageSizeInput = document.getElementById("setting-cli-page-size");
 
@@ -4448,11 +4618,15 @@ async function saveCookies() {
       throw new Error("保存失败，请稍后重试");
     }
     applyWebSettings(savedSettings || nextSettings);
-    setAuthFloatLoggedIn(true);
-    alert("保存成功");
-    document.getElementById("cookieModal").style.display = "none";
+    syncPlatformAccountRows(true);
+    window.dispatchEvent(new CustomEvent("musicdl:account-refresh"));
+    if (saveStatus) saveStatus.textContent = "已保存";
+    showToast("设置已保存", "更改已应用", "success");
   } catch (error) {
-    alert(error.message || "保存失败，请稍后重试");
+    if (saveStatus) saveStatus.textContent = "保存失败";
+    showToast("保存失败", error.message || "请稍后重试", "error");
+  } finally {
+    if (saveButton) saveButton.disabled = false;
   }
 }
 

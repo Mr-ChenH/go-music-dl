@@ -253,15 +253,7 @@ function AppNavigation({ node }) {
   };
   const isPath = (...parts) => parts.some((part) => path.includes(part));
 
-  const accountButton = (
-    <form id="auth-float-form" className="nav-account-form" action={`${data.root}/logout`} method="post" title="登录">
-      <button id="auth-float-button" type="submit" className="app-nav-button" aria-label="账户">
-        <Person24Regular id="auth-float-react-icon" aria-hidden="true" />
-        <i id="auth-float-icon" className="fa-solid fa-right-to-bracket" aria-hidden="true" />
-        <span id="auth-float-label">账户</span>
-      </button>
-    </form>
-  );
+  const accountButton = <NavButton label="账户" icon={Person24Regular} onClick={goWorkspace("account")} active={workspaceView === "account"} />;
 
   return (
     <>
@@ -309,7 +301,7 @@ function AppNavigation({ node }) {
         <NavButton label="正在播放" icon={MusicNote224Regular} onClick={goWorkspace("player")} active={workspaceView === "player"} />
         <NavButton label="本地音乐" icon={FolderOpen24Regular} onClick={go("openLocalMusicPage")} active={!workspaceView && isPath("/local_music_page")} />
         <NavButton label="下载" icon={History24Regular} onClick={goWorkspace("downloads")} active={workspaceView === "downloads"} />
-        <NavButton label="更多" icon={MoreHorizontal24Regular} onClick={() => setMoreOpen((value) => !value)} active={moreOpen || workspaceView === "history" || (!workspaceView && isPath("/recommend", "/playlist_categories", "/category_playlists", "/user_playlists", "/my_collections", "/collections", "/collection"))} />
+        <NavButton label="更多" icon={MoreHorizontal24Regular} onClick={() => setMoreOpen((value) => !value)} active={moreOpen || workspaceView === "history" || workspaceView === "account" || (!workspaceView && isPath("/recommend", "/playlist_categories", "/category_playlists", "/user_playlists", "/my_collections", "/collections", "/collection"))} />
       </nav>
 
       {moreOpen ? (
@@ -322,7 +314,7 @@ function AppNavigation({ node }) {
             <NavButton label="平台歌单" icon={FolderOpen24Regular} onClick={go("goToUserPlaylists")} />
             <NavButton label="播放历史" icon={Clock24Regular} onClick={goWorkspace("history")} />
             <NavButton label="系统设置" icon={Settings24Regular} onClick={go("openSystemConfig")} />
-            <NavButton label="账户" icon={Person24Regular} onClick={go("openSystemConfig")} />
+            <NavButton label="账户" icon={Person24Regular} onClick={goWorkspace("account")} />
           </div>
         </div>
       ) : null}

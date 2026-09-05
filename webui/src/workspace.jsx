@@ -4,17 +4,24 @@ import {
   ArrowClockwise24Regular,
   ArrowNext24Regular,
   ArrowPrevious24Regular,
+  CalendarClock24Regular,
+  CheckmarkCircle24Filled,
+  Database24Regular,
   Delete24Regular,
+  DismissCircle24Regular,
   FolderOpen24Regular,
   History24Regular,
   MusicNote224Regular,
   Pause24Filled,
   Play24Filled,
+  PlugConnected24Regular,
+  ShieldLock24Regular,
+  SignOut24Regular,
   Speaker224Regular,
   Video24Regular,
 } from "@fluentui/react-icons";
 
-const WORKSPACE_VIEWS = new Set(["downloads", "history", "player"]);
+const WORKSPACE_VIEWS = new Set(["downloads", "history", "player", "account"]);
 const HISTORY_KEY = "musicdl:playback-history";
 const DOWNLOAD_PAGE_SIZE = 20;
 const HISTORY_PAGE_SIZE = 12;
@@ -32,6 +39,7 @@ export function openWorkspaceView(view, historyMode = "push") {
   ["downloadRecordsModal", "playbackHistoryModal", "cookieModal"].forEach((id) => {
     const modal = document.getElementById(id);
     if (modal) modal.style.display = "none";
+    if (id === "cookieModal") document.body.classList.remove("settings-dialog-open");
   });
 
   const root = String(window.API_ROOT || "/music").replace(/\/$/, "");
@@ -45,6 +53,7 @@ export function openWorkspaceView(view, historyMode = "push") {
     window.history.pushState({ musicDlWorkspace: nextView }, "", url);
   }
   window.dispatchEvent(new CustomEvent("musicdl:workspace-change", { detail: nextView }));
+  document.body.classList.remove("content-list-scroll-active");
   window.scrollTo({ top: 0, behavior: "auto" });
 }
 
@@ -74,6 +83,7 @@ export const workspaceMetadata = {
   downloads: { group: "活动", title: "下载记录" },
   history: { group: "活动", title: "播放历史" },
   player: { group: "活动", title: "正在播放" },
+  account: { group: "系统", title: "账户" },
 };
 
 function formatDate(value) {
@@ -108,6 +118,7 @@ function DownloadRecordsPage({ apiRoot }) {
   const [data, setData] = useState({ records: [], playlist_tasks: [], total: 0, total_pages: 1 });
   const [state, setState] = useState("loading");
   const [error, setError] = useState("");
+  const recordsScrollRef = useRef(null);
 
   const load = useCallback(async (targetPage = page, silent = false) => {
     if (!silent) setState("loading");
@@ -142,6 +153,10 @@ function DownloadRecordsPage({ apiRoot }) {
     window.setDownloadRecordsButtonState?.(hasActivePlaylistTask ? "downloading" : "idle");
   }, [hasActivePlaylistTask]);
 
+  useEffect(() => {
+    recordsScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [page]);
+
   const clear = async () => {
     if (!window.confirm("确定清空所有下载记录？此操作不可撤销。")) return;
     const response = await fetch(`${apiRoot}/api/downloads/records`, { method: "DELETE" });
@@ -170,7 +185,7 @@ function DownloadRecordsPage({ apiRoot }) {
   };
 
   return (
-    <section className="workspace-view" aria-label="下载记录">
+    <section className="workspace-view activity-workspace download-records-workspace" aria-label="下载记录">
       <div className="workspace-view-toolbar">
         <div className="activity-summary">
           <span><strong>{data.total || 0}</strong>全部</span>
@@ -223,7 +238,7 @@ function DownloadRecordsPage({ apiRoot }) {
       {state === "error" ? <div className="workspace-inline-error">加载失败：{error}</div> : null}
       {state === "ready" && !data.records.length && !playlistTasks.length ? <EmptyState icon={History24Regular} title="暂无下载记录" detail="下载任务完成后会显示在这里" /> : null}
       {data.records.length ? (
-        <div className="activity-table-wrap">
+        <div className="activity-table-wrap activity-scroll-region" ref={recordsScrollRef} tabIndex="0" aria-label="下载歌曲记录列表">
           <table className="activity-table">
             <thead><tr><th>歌曲</th><th>歌手</th><th>来源</th><th>状态</th><th>时间</th></tr></thead>
             <tbody>{data.records.map((record, index) => {
@@ -261,6 +276,7 @@ function readHistory() {
 function PlaybackHistoryPage() {
   const [entries, setEntries] = useState(readHistory);
   const [page, setPage] = useState(1);
+  const historyScrollRef = useRef(null);
   const totalPages = Math.max(1, Math.ceil(entries.length / HISTORY_PAGE_SIZE));
   const visible = entries.slice((page - 1) * HISTORY_PAGE_SIZE, page * HISTORY_PAGE_SIZE);
 
@@ -273,6 +289,13 @@ function PlaybackHistoryPage() {
       window.removeEventListener("musicdl:playback-history-change", refresh);
     };
   }, []);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+  useEffect(() => {
+    historyScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [page]);
 
   const clear = () => {
     if (!window.confirm("确定清空播放历史？")) return;
@@ -287,7 +310,7 @@ function PlaybackHistoryPage() {
   };
 
   return (
-    <section className="workspace-view" aria-label="播放历史">
+    <section className="workspace-view activity-workspace playback-history-workspace" aria-label="播放历史">
       <div className="workspace-view-toolbar">
         <div className="activity-summary"><span><strong>{entries.length}</strong>最近播放</span></div>
         <div className="workspace-toolbar-actions">
@@ -297,7 +320,7 @@ function PlaybackHistoryPage() {
       </div>
 
       {!entries.length ? <EmptyState icon={History24Regular} title="暂无播放历史" detail="播放过的歌曲会保存在此设备" /> : (
-        <div className="history-list">{visible.map((entry) => (
+        <div className="history-list activity-scroll-region" ref={historyScrollRef} tabIndex="0" aria-label="播放历史歌曲列表">{visible.map((entry) => (
           <article className="history-row" key={`${entry.source}-${entry.id}`}>
             <div className="history-cover">{entry.cover ? <><img src={entry.cover} alt="" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.nextElementSibling?.removeAttribute("hidden"); }} /><MusicNote224Regular hidden /></> : <MusicNote224Regular />}</div>
             <div className="history-copy"><strong>{entry.name}</strong><span>{entry.artist || "未知歌手"}{entry.album ? ` · ${entry.album}` : ""}</span></div>
@@ -383,6 +406,90 @@ export function MiniPlayer({ hidden = false }) {
       <span className="mini-player-progress" aria-hidden="true"><span style={{ width: `${progress}%` }} /></span>
     </aside>,
     document.body,
+  );
+}
+
+function AccountPage({ apiRoot }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = () => {
+      setError("");
+      fetch(`${apiRoot}/api/account`, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          const payload = await response.json().catch(() => null);
+          if (response.status === 401) {
+            const next = encodeURIComponent(`${apiRoot}/?view=account`);
+            window.location.href = `${apiRoot}/login?next=${next}`;
+            return null;
+          }
+          if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+          setData(payload);
+          return payload;
+        })
+        .catch((reason) => {
+          if (reason?.name !== "AbortError") setError(reason instanceof Error ? reason.message : String(reason));
+        });
+    };
+    load();
+    window.addEventListener("musicdl:account-refresh", load);
+    return () => {
+      window.removeEventListener("musicdl:account-refresh", load);
+      controller.abort();
+    };
+  }, [apiRoot]);
+
+  if (error) {
+    return <section className="workspace-view"><EmptyState icon={DismissCircle24Regular} title="账户信息加载失败" detail={error} action={<button type="button" className="workspace-command" onClick={() => window.location.reload()}>重试</button>} /></section>;
+  }
+  if (!data) {
+    return <section className="workspace-view account-view is-loading" aria-label="账户"><div className="account-loading"><span /><span /><span /></div></section>;
+  }
+
+  const stats = [
+    ["我的歌单", data.stats?.collections || 0, FolderOpen24Regular],
+    ["本地音乐", data.stats?.local_tracks || 0, Database24Regular],
+    ["下载记录", data.stats?.download_records || 0, ArrowClockwise24Regular],
+    ["歌单任务", data.stats?.playlist_downloads || 0, MusicNote224Regular],
+  ];
+  const username = data.username || "本地用户";
+  const initial = Array.from(username)[0]?.toUpperCase() || "U";
+  const connectedPlatforms = (data.platforms || []).filter((platform) => platform.connected);
+  const sessionIssued = data.session_issued_at ? formatDate(data.session_issued_at) : "本地免登录";
+  const sessionExpires = data.session_expires_at ? formatDate(data.session_expires_at) : "不适用";
+
+  return (
+    <section className="workspace-view account-view" aria-label="账户概览">
+      <header className="account-identity-band">
+        <span className="account-avatar" aria-hidden="true">{initial}</span>
+        <div className="account-identity-copy">
+          <span>music-dl 账户</span>
+          <h2>{username}</h2>
+          <div><span className="account-role-badge">{data.role || "管理员"}</span><span className={data.auth_enabled ? "account-security-badge is-secure" : "account-security-badge"}><ShieldLock24Regular />{data.auth_enabled ? "密码登录已启用" : "本地免登录模式"}</span></div>
+        </div>
+        <button type="button" className="workspace-command account-platform-command" onClick={() => window.openPlatformAccountSettings?.()}><PlugConnected24Regular />管理平台账户</button>
+      </header>
+
+      <div className="account-stat-grid">{stats.map(([label, value, Icon]) => <article className="account-stat" key={label}><Icon aria-hidden="true" /><span>{label}</span><strong>{value}</strong></article>)}</div>
+
+      <div className="account-detail-grid">
+        <section className="account-section">
+          <header><div><h3>平台连接</h3><span>{data.connected_platforms || 0} 个已连接</span></div><PlugConnected24Regular aria-hidden="true" /></header>
+          {connectedPlatforms.length ? <div className="account-platform-list">{connectedPlatforms.map((platform) => <div className="account-platform-row" key={platform.source}><span className="account-platform-mark">{Array.from(platform.name || platform.source)[0]}</span><span><strong>{platform.name || platform.source}</strong><small>{platform.source}</small></span><CheckmarkCircle24Filled aria-label="已连接" /></div>)}</div> : <div className="account-section-empty">尚未连接音乐平台</div>}
+        </section>
+
+        <section className="account-section">
+          <header><div><h3>当前会话</h3><span>{data.session_max_age_days || 7} 天有效期</span></div><ShieldLock24Regular aria-hidden="true" /></header>
+          <dl className="account-session-list"><div><dt><CalendarClock24Regular />登录时间</dt><dd>{sessionIssued}</dd></div><div><dt><ShieldLock24Regular />到期时间</dt><dd>{sessionExpires}</dd></div></dl>
+          <form action={`${apiRoot}/logout`} method="post" className="account-logout-form"><button type="submit" className="workspace-command is-danger"><SignOut24Regular />退出登录</button></form>
+        </section>
+      </div>
+    </section>
   );
 }
 
@@ -511,5 +618,6 @@ export function WorkspaceView({ view, apiRoot }) {
   if (view === "downloads") return <DownloadRecordsPage apiRoot={apiRoot} />;
   if (view === "history") return <PlaybackHistoryPage />;
   if (view === "player") return <NowPlayingPage />;
+  if (view === "account") return <AccountPage apiRoot={apiRoot} />;
   return null;
 }

@@ -27,6 +27,7 @@
 {{ end }}
 
 {{ if .Playlists }}
+    {{ if not .PlaylistCategoryCurrent }}
     <div class="list-header" style="margin-bottom: 15px;">
         <div>
             <span class="result-count">
@@ -38,7 +39,8 @@
             {{ end }}
         </div>
     </div>
-    <div class="playlist-grid-container">
+    {{ end }}
+    <div class="playlist-grid-container{{ if .PlaylistCategoryCurrent }} category-playlist-grid{{ end }}">
         {{ range .Playlists }}
         {{ $detailURL := playlistDetailURL $.Root $.SearchType . }}
         {{ $collectionKind := playlistExtraValue . "collection_kind" }}

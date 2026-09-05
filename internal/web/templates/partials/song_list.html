@@ -171,7 +171,7 @@
     <div id="localMusicPageHint" class="local-music-page-hint" style="display:none;"></div>
     {{ end }}
 
-    <ul class="result-list" {{ if $isLocalMusicPage }}id="localMusicPageList" data-local-music-page="true"{{ end }}>
+    <ul class="result-list{{ if or .ImportCollection .ColID }} collection-song-list{{ end }}" {{ if $isLocalMusicPage }}id="localMusicPageList" data-local-music-page="true"{{ end }}>
         {{ range .Result }}
         {{ $song := . }}
         {{ $artists := artistTokens .Artist }}

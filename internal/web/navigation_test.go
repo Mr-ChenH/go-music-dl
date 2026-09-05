@@ -345,13 +345,27 @@ func TestPlaylistCategoriesLoadResultsInsideCategoryWorkspace(t *testing.T) {
 	if !strings.Contains(string(gridTemplate), "loadCategoryPlaylistsPage(") {
 		t.Fatal("category result pagination must update the inline result region")
 	}
+	for _, want := range []string{
+		`{{ if not .PlaylistCategoryCurrent }}`,
+		`category-playlist-grid`,
+	} {
+		if !strings.Contains(string(gridTemplate), want) {
+			t.Fatalf("category result grid missing compact result structure %q", want)
+		}
+	}
 
 	js := string(appJS)
 	for _, want := range []string{
 		`if (link.classList.contains("category-chip"))`,
 		"async function loadCategoryPlaylists(link, options = {})",
 		`nextDoc.getElementById("category-playlist-results")`,
+		"function setCategoryBrowserResultsMode(active)",
+		"function syncCategoryBrowserResultsMode()",
+		"setCategoryBrowserResultsMode(true);",
+		"commitNavigationHistory(targetURL,",
+		"navigateTo(`${root}/playlist_categories`);",
 		"function focusCategoryBrowser()",
+		"syncContentListScrollRegions();",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("app.js missing inline category result behavior %q", want)

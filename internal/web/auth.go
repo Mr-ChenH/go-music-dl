@@ -175,6 +175,22 @@ func signSessionPayload(secret string, encodedPayload string) string {
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
+func decodeSessionPayload(value string) (sessionPayload, error) {
+	parts := strings.Split(value, ".")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return sessionPayload{}, fmt.Errorf("invalid session format")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return sessionPayload{}, err
+	}
+	var payload sessionPayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return sessionPayload{}, err
+	}
+	return payload, nil
+}
+
 func validateSessionValue(settings core.WebAuthSettings, value string, now time.Time) bool {
 	if !authConfigured(settings) {
 		return false
@@ -190,12 +206,8 @@ func validateSessionValue(settings core.WebAuthSettings, value string, now time.
 		return false
 	}
 
-	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	payload, err := decodeSessionPayload(value)
 	if err != nil {
-		return false
-	}
-	var payload sessionPayload
-	if err := json.Unmarshal(raw, &payload); err != nil {
 		return false
 	}
 	if payload.Username != settings.Username || payload.IssuedAt <= 0 || strings.TrimSpace(payload.Nonce) == "" {

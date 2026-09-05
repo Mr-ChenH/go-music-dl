@@ -3,42 +3,73 @@
     <div class="modal settings-modal">
         <div class="modal-header settings-modal-header">
             <div>
-                <h3>系统设置</h3>
-                <p>账户、下载、播放与应用功能</p>
+                <h3 id="settings-dialog-title">系统设置</h3>
+                <p id="settings-dialog-subtitle">下载、播放与应用偏好</p>
             </div>
-            <div class="modal-close" onclick="document.getElementById('cookieModal').style.display='none'"><i class="fa-solid fa-xmark"></i></div>
+            <button type="button" class="modal-close settings-close-button" aria-label="关闭设置" title="关闭" onclick="closeSystemConfig()"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="modal-body settings-modal-body">
-            <section class="settings-section settings-accounts">
-                <header class="settings-section-header">
+            <div class="settings-layout">
+                <nav class="settings-navigation" aria-label="设置分类">
+                    <button type="button" class="settings-navigation-item" data-settings-target="accounts" onclick="switchSettingsSection('accounts')"><i class="fa-solid fa-user-key"></i><span>平台账户</span></button>
+                    <button type="button" class="settings-navigation-item is-active" data-settings-target="downloads" onclick="switchSettingsSection('downloads')"><i class="fa-solid fa-download"></i><span>下载与同步</span></button>
+                    <button type="button" class="settings-navigation-item" data-settings-target="playback" onclick="switchSettingsSection('playback')"><i class="fa-solid fa-sliders"></i><span>播放与列表</span></button>
+                    <button type="button" class="settings-navigation-item" data-settings-target="application" onclick="switchSettingsSection('application')"><i class="fa-solid fa-window-restore"></i><span>应用功能</span></button>
+                </nav>
+                <div class="settings-pages">
+            <section class="settings-section settings-accounts settings-page" data-settings-section="accounts">
+                <header class="settings-section-header platform-settings-header">
                     <span class="settings-section-icon"><i class="fa-solid fa-key"></i></span>
-                    <div><h4>平台账户</h4><p>配置各音乐平台的 Cookie 或扫码登录</p></div>
+                    <div><h4>平台账户</h4><p><span id="platform-connected-count">0</span> 个平台已连接</p></div>
                 </header>
-            <div class="cookie-list">
+                <label class="platform-filter" for="platform-account-filter">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input id="platform-account-filter" type="search" placeholder="筛选平台" autocomplete="off" oninput="filterPlatformAccounts(this.value)">
+                </label>
+                <div class="cookie-list platform-account-list">
                 {{ range $source := .AllSources }}
-                <div class="cookie-item">
-                    <label>{{ $source }}</label>
-                    <div class="cookie-input-row">
-                        <input type="text" id="cookie-{{$source}}" placeholder="在此粘贴 Cookie...">
-                        {{ if eq $source "qq" }}
-                        {{ if index $.QRLoginSupported "qq" }}
-                        <button type="button" class="cookie-qr-btn" onclick="startQRLogin('qq')"><i class="fa-brands fa-qq"></i> QQ扫码</button>
-                        {{ end }}
-                        {{ if index $.QRLoginSupported "qq_wx" }}
-                        <button type="button" class="cookie-qr-btn cookie-qr-btn-wx" onclick="startQRLogin('qq_wx')"><i class="fa-brands fa-weixin"></i> 微信扫码</button>
-                        {{ end }}
-                        {{ else }}
-                        {{ if index $.QRLoginSupported $source }}
-                        <button type="button" class="cookie-qr-btn" onclick="startQRLogin('{{$source}}')"><i class="fa-solid fa-qrcode"></i> 扫码</button>
-                        {{ end }}
-                        {{ end }}
+                {{ if ne $source "local" }}
+                <details class="platform-account-row" data-platform-source="{{$source}}" data-platform-name="{{ index $.SourceDescriptions $source }}">
+                    <summary>
+                        <span class="platform-account-mark"><i class="fa-solid fa-music" aria-hidden="true"></i></span>
+                        <span class="platform-account-copy">
+                            <strong>{{ index $.SourceDescriptions $source }}</strong>
+                            <small>{{$source}}</small>
+                        </span>
+                        <span class="platform-account-status"><i aria-hidden="true"></i><span>未连接</span></span>
+                        <i class="fa-solid fa-chevron-down platform-account-chevron" aria-hidden="true"></i>
+                    </summary>
+                    <div class="platform-account-editor">
+                        <label for="cookie-{{$source}}">Cookie</label>
+                        <div class="cookie-input-row">
+                            <div class="platform-cookie-field">
+                                <input type="password" id="cookie-{{$source}}" placeholder="粘贴平台 Cookie" autocomplete="off" oninput="syncPlatformAccountRows()">
+                                <button type="button" class="platform-cookie-visibility" aria-label="显示 Cookie" title="显示 Cookie" onclick="togglePlatformCookieVisibility(this)"><i class="fa-regular fa-eye"></i></button>
+                            </div>
+                            <div class="platform-login-actions">
+                            {{ if eq $source "qq" }}
+                            {{ if index $.QRLoginSupported "qq" }}
+                            <button type="button" class="cookie-qr-btn" onclick="startQRLogin('qq')"><i class="fa-brands fa-qq"></i> QQ扫码</button>
+                            {{ end }}
+                            {{ if index $.QRLoginSupported "qq_wx" }}
+                            <button type="button" class="cookie-qr-btn cookie-qr-btn-wx" onclick="startQRLogin('qq_wx')"><i class="fa-brands fa-weixin"></i> 微信扫码</button>
+                            {{ end }}
+                            {{ else }}
+                            {{ if index $.QRLoginSupported $source }}
+                            <button type="button" class="cookie-qr-btn" onclick="startQRLogin('{{$source}}')"><i class="fa-solid fa-qrcode"></i> 扫码登录</button>
+                            {{ end }}
+                            {{ end }}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                </details>
                 {{ end }}
-            </div>
+                {{ end }}
+                </div>
+                <div id="platform-filter-empty" class="platform-filter-empty" hidden>没有匹配的平台</div>
             </section>
 
-            <section class="settings-section settings-downloads">
+            <section class="settings-section settings-downloads settings-page is-active" data-settings-section="downloads">
                 <header class="settings-section-header">
                     <span class="settings-section-icon"><i class="fa-solid fa-download"></i></span>
                     <div><h4>下载与同步</h4><p>文件保存、元数据与远端同步</p></div>
@@ -116,7 +147,7 @@
             </div>
             </section>
 
-            <section class="settings-section settings-playback">
+            <section class="settings-section settings-playback settings-page" data-settings-section="playback">
                 <header class="settings-section-header">
                     <span class="settings-section-icon"><i class="fa-solid fa-sliders"></i></span>
                     <div><h4>播放与列表</h4><p>播放器行为、分页和自动处理</p></div>
@@ -156,7 +187,7 @@
             </div>
             </section>
 
-            <section class="settings-section settings-application">
+            <section class="settings-section settings-application settings-page" data-settings-section="application">
                 <header class="settings-section-header">
                     <span class="settings-section-icon"><i class="fa-solid fa-window-restore"></i></span>
                     <div><h4>应用功能</h4><p>版本信息、活动记录与视频工具入口</p></div>
@@ -210,8 +241,11 @@
                 <p class="setting-hint">控制视频生成弹窗中的导出视频入口，默认隐藏。</p>
             </div>
             </section>
+                </div>
+            </div>
             <div class="settings-modal-footer">
-                <button class="btn-save" onclick="saveCookies()">保存设置</button>
+                <span id="settings-save-status" role="status"></span>
+                <button id="settings-save-button" class="btn-save" onclick="saveCookies()"><i class="fa-solid fa-floppy-disk"></i> 保存设置</button>
             </div>
         </div>
     </div>
