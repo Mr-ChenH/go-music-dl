@@ -1,11 +1,15 @@
 package web
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/guohuiyuan/go-music-dl/core"
 	"github.com/guohuiyuan/music-lib/model"
 )
@@ -159,6 +163,49 @@ func TestRunPlaylistDownloadTaskRecoversProviderPanic(t *testing.T) {
 	}
 }
 
+func TestPlaylistDownloadTaskRecordsEndpointKeepsTasksSeparate(t *testing.T) {
+	setupPlaylistDownloadTestDB(t)
+	gin.SetMode(gin.TestMode)
+	if err := core.ClearDownloadRecords(); err != nil {
+		t.Fatalf("clear download records: %v", err)
+	}
+
+	task := PlaylistDownloadTask{PlaylistName: "Grouped Mix", Cover: "https://example.com/cover.jpg", Source: "qq", ExternalID: "mix-1", Status: playlistTaskCompleted, Total: 2, Completed: 2}
+	other := PlaylistDownloadTask{PlaylistName: "Other Mix", Source: "netease", ExternalID: "mix-2", Status: playlistTaskCompleted, Total: 1, Completed: 1}
+	if err := db.Create(&task).Error; err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatalf("create other task: %v", err)
+	}
+	if err := core.SaveDownloadRecordForTask(task.ID, task.PlaylistName, "One", "Artist", "qq", core.DownloadStatusSuccess, ""); err != nil {
+		t.Fatalf("save task record: %v", err)
+	}
+	if err := core.SaveDownloadRecordForTask(other.ID, other.PlaylistName, "Other", "Artist", "netease", core.DownloadStatusSuccess, ""); err != nil {
+		t.Fatalf("save other record: %v", err)
+	}
+
+	router := gin.New()
+	api := router.Group(RoutePrefix)
+	RegisterPlaylistDownloadRoutes(api)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, RoutePrefix+"/api/downloads/playlists/"+strconv.FormatUint(uint64(task.ID), 10)+"/records", nil)
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	var response struct {
+		Records []core.DownloadRecord `json:"records"`
+		Total   int64                 `json:"total"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if response.Total != 1 || len(response.Records) != 1 || response.Records[0].TaskID != task.ID {
+		t.Fatalf("task records response = %+v, want only task %d", response, task.ID)
+	}
+}
+
 func TestPlaylistDownloadUIExposesTaskEntryAndProgress(t *testing.T) {
 	for _, path := range []string{
 		"templates/partials/song_list.html",
@@ -188,7 +235,7 @@ func TestPlaylistDownloadUIExposesTaskEntryAndProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(react-app.js): %v", err)
 	}
-	for _, want := range []string{"playlist_tasks", "歌单下载", "打开歌单"} {
+	for _, want := range []string{"playlist_tasks", "歌单任务", "打开我的歌单", "/api/downloads/playlists/"} {
 		if !strings.Contains(string(reactBundle), want) {
 			t.Fatalf("React bundle missing %q", want)
 		}

@@ -6,6 +6,8 @@ import {
   ArrowPrevious24Regular,
   CalendarClock24Regular,
   CheckmarkCircle24Filled,
+  ChevronDown24Regular,
+  ChevronUp24Regular,
   Database24Regular,
   Delete24Regular,
   DismissCircle24Regular,
@@ -113,11 +115,100 @@ function EmptyState({ icon: Icon, title, detail, action }) {
   );
 }
 
+const ACTIVE_PLAYLIST_TASK_STATUSES = new Set(["queued", "resolving", "downloading"]);
+
+function playlistTaskPresentation(task) {
+  const total = Math.max(0, Number(task?.total || 0));
+  const completed = Math.max(0, Number(task?.completed || 0));
+  const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+  const statusMeta = {
+    queued: ["等待中", "is-queued"],
+    resolving: ["解析歌单", "is-running"],
+    downloading: ["下载中", "is-running"],
+    completed: ["已完成", "is-success"],
+    partial: ["部分完成", "is-warning"],
+    failed: ["失败", "is-error"],
+  }[task?.status] || [task?.status || "未知", "is-error"];
+  return { total, completed, percent, statusMeta };
+}
+
+function PlaylistDownloadGroup({ task, apiRoot, openLocalPlaylist, expanded, onToggle }) {
+  const [page, setPage] = useState(1);
+  const [details, setDetails] = useState({ records: [], total: 0, total_pages: 1 });
+  const [detailsState, setDetailsState] = useState("idle");
+  const { total, completed, percent, statusMeta } = playlistTaskPresentation(task);
+  const active = ACTIVE_PLAYLIST_TASK_STATUSES.has(task.status);
+
+  const loadDetails = useCallback(async (targetPage = 1) => {
+    setDetailsState("loading");
+    try {
+      const params = new URLSearchParams({ page: String(targetPage), page_size: "10" });
+      const response = await fetch(`${apiRoot}/api/downloads/playlists/${encodeURIComponent(task.id)}/records?${params}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      setDetails({ ...payload, records: payload.records || [] });
+      setPage(Math.max(1, Number(payload.page || targetPage)));
+      setDetailsState("ready");
+    } catch (_) {
+      setDetailsState("error");
+    }
+  }, [apiRoot, task.id]);
+
+  useEffect(() => {
+    if (expanded) loadDetails(page);
+  }, [expanded, page, task.completed, loadDetails]);
+
+  const toggle = () => onToggle(task.id);
+
+  return (
+    <article className={`download-group${expanded ? " is-expanded" : ""}${active ? " is-active" : ""}`}>
+      <div className="download-group-summary">
+        <button type="button" className="download-group-main" onClick={toggle} aria-expanded={expanded}>
+          <span className="download-group-cover">{task.cover ? <><img src={task.cover} alt="" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.nextElementSibling?.removeAttribute("hidden"); }} /><MusicNote224Regular hidden /></> : <MusicNote224Regular />}</span>
+          <span className="download-group-copy">
+            <span><strong>{task.playlist_name || "未命名歌单"}</strong><span className="source-badge">{task.source || "-"}</span></span>
+            <small>{active ? task.current_song || "正在准备歌曲" : formatDate(task.updated_at || task.created_at)}</small>
+          </span>
+        </button>
+        <div className="download-group-result">
+          <span className={`activity-status ${statusMeta[1]}`}>{statusMeta[0]}</span>
+          <span className="download-group-fraction">{completed} / {total || "-"}</span>
+          {task.local_collection_id ? <button type="button" className="workspace-icon-button" onClick={() => openLocalPlaylist(task.local_collection_id)} aria-label={`打开歌单 ${task.playlist_name || ""}`} title="打开我的歌单"><FolderOpen24Regular /></button> : null}
+          <button type="button" className="workspace-icon-button" onClick={toggle} aria-label={expanded ? "收起歌曲" : "查看歌曲"} title={expanded ? "收起歌曲" : "查看歌曲"}>{expanded ? <ChevronUp24Regular /> : <ChevronDown24Regular />}</button>
+        </div>
+        <div className="download-group-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
+      </div>
+
+      {expanded ? <div className="download-group-details">
+        <header><span>{details.total || completed} 首处理记录</span><span>成功 {task.success || 0} · 跳过 {task.skipped || 0} · 失败 {task.failed || 0}</span></header>
+        {detailsState === "loading" && !details.records.length ? <div className="download-group-message">正在读取歌曲</div> : null}
+        {detailsState === "error" ? <div className="download-group-message is-error">歌曲记录加载失败 <button type="button" onClick={() => loadDetails(page)}>重试</button></div> : null}
+        {detailsState === "ready" && !details.records.length ? <div className="download-group-message">任务尚未产生歌曲记录</div> : null}
+        {details.records.length ? <div className="download-group-tracks">{details.records.map((record) => {
+          const status = record.Status === "success" ? "成功" : record.Status === "skipped" ? "跳过" : "失败";
+          return <div className="download-group-track" key={record.ID || `${record.CreatedAt}-${record.Name}`} title={record.Error || ""}>
+            <span><strong>{record.Name || "-"}</strong><small>{record.Artist || "未知歌手"}</small></span>
+            <span className={`activity-status is-${record.Status || "failed"}`}>{status}</span>
+            <time>{formatDate(record.CreatedAt)}</time>
+          </div>;
+        })}</div> : null}
+        {Number(details.total_pages || 1) > 1 ? <div className="download-group-pagination">
+          <PageButton label="上一页" disabled={page <= 1} onClick={() => setPage(page - 1)}><ArrowPrevious24Regular /></PageButton>
+          <span>第 {page} / {details.total_pages} 页</span>
+          <PageButton label="下一页" disabled={page >= details.total_pages} onClick={() => setPage(page + 1)}><ArrowNext24Regular /></PageButton>
+        </div> : null}
+      </div> : null}
+    </article>
+  );
+}
+
 function DownloadRecordsPage({ apiRoot }) {
   const [page, setPage] = useState(1);
   const [data, setData] = useState({ records: [], playlist_tasks: [], total: 0, total_pages: 1 });
   const [state, setState] = useState("loading");
   const [error, setError] = useState("");
+  const [mode, setMode] = useState("playlists");
+  const [expandedTaskID, setExpandedTaskID] = useState(null);
   const recordsScrollRef = useRef(null);
 
   const load = useCallback(async (targetPage = page, silent = false) => {
@@ -143,7 +234,7 @@ function DownloadRecordsPage({ apiRoot }) {
     window.addEventListener("musicdl:workspace-refresh", refresh);
     return () => window.removeEventListener("musicdl:workspace-refresh", refresh);
   }, [load]);
-  const hasActivePlaylistTask = (data.playlist_tasks || []).some((task) => ["queued", "resolving", "downloading"].includes(task.status));
+  const hasActivePlaylistTask = (data.playlist_tasks || []).some((task) => ACTIVE_PLAYLIST_TASK_STATUSES.has(task.status));
   useEffect(() => {
     if (!hasActivePlaylistTask) return undefined;
     const timer = window.setInterval(() => load(1, true), 2000);
@@ -177,6 +268,14 @@ function DownloadRecordsPage({ apiRoot }) {
   }, [data.records]);
 
   const playlistTasks = data.playlist_tasks || [];
+  const taskSummary = {
+    active: playlistTasks.filter((task) => ACTIVE_PLAYLIST_TASK_STATUSES.has(task.status)).length,
+    completed: playlistTasks.filter((task) => task.status === "completed").length,
+    attention: playlistTasks.filter((task) => task.status === "partial" || task.status === "failed").length,
+  };
+  useEffect(() => {
+    if (state === "ready" && !playlistTasks.length) setMode("records");
+  }, [state, playlistTasks.length]);
   const openLocalPlaylist = (collectionID) => {
     if (!collectionID) return;
     const url = `${apiRoot}/collection?id=${encodeURIComponent(collectionID)}`;
@@ -188,65 +287,55 @@ function DownloadRecordsPage({ apiRoot }) {
     <section className="workspace-view activity-workspace download-records-workspace" aria-label="下载记录">
       <div className="workspace-view-toolbar">
         <div className="activity-summary">
-          <span><strong>{data.total || 0}</strong>全部</span>
-          <span className="is-success"><strong>{summary.success}</strong>本页成功</span>
-          <span className="is-warning"><strong>{summary.skipped}</strong>本页跳过</span>
-          <span className="is-error"><strong>{summary.failed}</strong>本页失败</span>
+          {mode === "playlists" && playlistTasks.length ? <>
+            <span><strong>{playlistTasks.length}</strong>歌单任务</span>
+            <span><strong>{taskSummary.active}</strong>进行中</span>
+            <span className="is-success"><strong>{taskSummary.completed}</strong>已完成</span>
+            <span className={taskSummary.attention ? "is-error" : ""}><strong>{taskSummary.attention}</strong>需关注</span>
+          </> : <>
+            <span><strong>{data.total || 0}</strong>全部歌曲</span>
+            <span className="is-success"><strong>{summary.success}</strong>本页成功</span>
+            <span className="is-warning"><strong>{summary.skipped}</strong>本页跳过</span>
+            <span className="is-error"><strong>{summary.failed}</strong>本页失败</span>
+          </>}
         </div>
         <div className="workspace-toolbar-actions">
           <button type="button" className="workspace-command" onClick={() => window.openLocalMusicPage?.()}><FolderOpen24Regular />本地音乐</button>
           <PageButton label="刷新" onClick={() => load(page)}><ArrowClockwise24Regular /></PageButton>
-          <PageButton label="清空下载记录" onClick={clear} disabled={!data.total}><Delete24Regular /></PageButton>
+          <PageButton label="清空下载记录" onClick={clear} disabled={!data.total && !playlistTasks.length}><Delete24Regular /></PageButton>
         </div>
       </div>
 
-      {playlistTasks.length ? (
-        <section className="playlist-download-tasks" aria-label="歌单下载任务">
-          <header><div><strong>歌单下载</strong><span>完成后自动保存到“我的歌单”</span></div><span>{playlistTasks.length} 个任务</span></header>
-          <div className="playlist-download-task-list">{playlistTasks.map((task) => {
-            const total = Math.max(0, Number(task.total || 0));
-            const completed = Math.max(0, Number(task.completed || 0));
-            const percent = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
-            const statusMeta = {
-              queued: ["等待中", "is-queued"],
-              resolving: ["解析歌单", "is-running"],
-              downloading: ["下载中", "is-running"],
-              completed: ["已完成", "is-success"],
-              partial: ["部分完成", "is-warning"],
-              failed: ["失败", "is-error"],
-            }[task.status] || [task.status || "未知", "is-error"];
-            return <article className="playlist-download-task" key={task.id}>
-              <div className="playlist-task-main">
-                <div className="playlist-task-title"><strong>{task.playlist_name || "未命名歌单"}</strong><span className="source-badge">{task.source || "-"}</span></div>
-                <div className="playlist-task-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
-                <div className="playlist-task-detail">
-                  <span>{task.current_song || (task.status === "queued" ? "等待前一个任务完成" : total > 0 ? `${completed} / ${total}` : "正在读取歌曲列表")}</span>
-                  {task.error ? <span className="is-error">{task.error}</span> : null}
-                </div>
-              </div>
-              <div className="playlist-task-stats">
-                <span className={`activity-status ${statusMeta[1]}`}>{statusMeta[0]}</span>
-                <small>成功 {task.success || 0}</small><small>跳过 {task.skipped || 0}</small><small>失败 {task.failed || 0}</small>
-                {task.local_collection_id ? <button type="button" className="workspace-command" onClick={() => openLocalPlaylist(task.local_collection_id)}><FolderOpen24Regular />打开歌单</button> : null}
-              </div>
-            </article>;
-          })}</div>
-        </section>
-      ) : null}
+      <div className="download-view-tabs" role="tablist" aria-label="下载记录视图">
+        <button type="button" role="tab" aria-selected={mode === "playlists"} className={mode === "playlists" ? "is-active" : ""} onClick={() => setMode("playlists")} disabled={!playlistTasks.length}>歌单任务 <span>{playlistTasks.length}</span></button>
+        <button type="button" role="tab" aria-selected={mode === "records"} className={mode === "records" ? "is-active" : ""} onClick={() => setMode("records")}>全部歌曲 <span>{data.total || 0}</span></button>
+      </div>
 
       {state === "loading" ? <div className="workspace-loading">正在读取下载记录</div> : null}
       {state === "error" ? <div className="workspace-inline-error">加载失败：{error}</div> : null}
       {state === "ready" && !data.records.length && !playlistTasks.length ? <EmptyState icon={History24Regular} title="暂无下载记录" detail="下载任务完成后会显示在这里" /> : null}
-      {data.records.length ? (
-        <div className="activity-table-wrap activity-scroll-region" ref={recordsScrollRef} tabIndex="0" aria-label="下载歌曲记录列表">
+
+      {mode === "playlists" && playlistTasks.length ? <div className="download-group-list activity-scroll-region" tabIndex="0" aria-label="按歌单分组的下载任务">
+        {playlistTasks.map((task) => <PlaylistDownloadGroup
+          key={task.id}
+          task={task}
+          apiRoot={apiRoot}
+          openLocalPlaylist={openLocalPlaylist}
+          expanded={expandedTaskID === task.id}
+          onToggle={(taskID) => setExpandedTaskID((current) => current === taskID ? null : taskID)}
+        />)}
+      </div> : null}
+
+      {mode === "records" && data.records.length ? (
+        <div className="activity-table-wrap activity-scroll-region" ref={recordsScrollRef} tabIndex="0" aria-label="全部下载歌曲记录">
           <table className="activity-table">
-            <thead><tr><th>歌曲</th><th>歌手</th><th>来源</th><th>状态</th><th>时间</th></tr></thead>
+            <thead><tr><th>歌曲</th><th>歌手</th><th>归属 / 来源</th><th>状态</th><th>时间</th></tr></thead>
             <tbody>{data.records.map((record, index) => {
               const status = record.Status === "success" ? "成功" : record.Status === "skipped" ? "跳过" : "失败";
-              return <tr key={`${record.CreatedAt || "record"}-${index}`} title={record.Error || ""}>
-                <td data-label="歌曲"><strong>{record.Name || "-"}</strong>{record.PlaylistName ? <small className="record-playlist-name">{record.PlaylistName}</small> : null}</td>
+              return <tr key={record.ID || `${record.CreatedAt || "record"}-${index}`} title={record.Error || ""}>
+                <td data-label="歌曲"><strong>{record.Name || "-"}</strong></td>
                 <td data-label="歌手">{record.Artist || "-"}</td>
-                <td data-label="来源"><span className="source-badge">{record.Source || "-"}</span></td>
+                <td data-label="归属 / 来源"><span className="record-origin"><span className={record.PlaylistName ? "record-playlist-badge" : "record-playlist-badge is-single"}>{record.PlaylistName || "单曲下载"}</span><small>{record.Source || "-"}</small></span></td>
                 <td data-label="状态"><span className={`activity-status is-${record.Status || "failed"}`}>{status}</span></td>
                 <td data-label="时间"><time>{formatDate(record.CreatedAt)}</time></td>
               </tr>;
@@ -255,7 +344,9 @@ function DownloadRecordsPage({ apiRoot }) {
         </div>
       ) : null}
 
-      {Number(data.total_pages || 1) > 1 ? <div className="workspace-pagination">
+      {mode === "records" && state === "ready" && !data.records.length && playlistTasks.length ? <EmptyState icon={MusicNote224Regular} title="暂无歌曲记录" detail="歌单任务开始处理歌曲后会显示在这里" /> : null}
+
+      {mode === "records" && Number(data.total_pages || 1) > 1 ? <div className="workspace-pagination">
         <PageButton label="上一页" disabled={page <= 1} onClick={() => load(page - 1)}><ArrowPrevious24Regular /></PageButton>
         <span>第 {page} / {data.total_pages} 页</span>
         <PageButton label="下一页" disabled={page >= data.total_pages} onClick={() => load(page + 1)}><ArrowNext24Regular /></PageButton>

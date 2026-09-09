@@ -109,12 +109,7 @@ func GetDownloadRecords() ([]DownloadRecord, error) {
 	return records, err
 }
 
-// GetDownloadRecordPage returns one page of user-visible download records and
-// the total number of records available for pagination.
-func GetDownloadRecordPage(page, pageSize int) ([]DownloadRecord, int64, error) {
-	if err := initDownloadRecordTable(); err != nil {
-		return nil, 0, err
-	}
+func getDownloadRecordPage(query *gorm.DB, page, pageSize int) ([]DownloadRecord, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -126,12 +121,34 @@ func GetDownloadRecordPage(page, pageSize int) ([]DownloadRecord, int64, error) 
 	}
 
 	var total int64
-	if err := configDB.Model(&DownloadRecord{}).Count(&total).Error; err != nil {
+	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var records []DownloadRecord
-	err := configDB.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&records).Error
+	err := query.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&records).Error
 	return records, total, err
+}
+
+// GetDownloadRecordPage returns one page of user-visible download records and
+// the total number of records available for pagination.
+func GetDownloadRecordPage(page, pageSize int) ([]DownloadRecord, int64, error) {
+	if err := initDownloadRecordTable(); err != nil {
+		return nil, 0, err
+	}
+	return getDownloadRecordPage(configDB.Model(&DownloadRecord{}), page, pageSize)
+}
+
+// GetDownloadRecordPageForTask returns records belonging to one playlist
+// download task. Task zero is reserved for downloads started as individual songs.
+func GetDownloadRecordPageForTask(taskID uint, page, pageSize int) ([]DownloadRecord, int64, error) {
+	if err := initDownloadRecordTable(); err != nil {
+		return nil, 0, err
+	}
+	return getDownloadRecordPage(
+		configDB.Model(&DownloadRecord{}).Where("task_id = ?", taskID),
+		page,
+		pageSize,
+	)
 }
 
 // ClearDownloadRecords clears only the history displayed in the UI. The durable

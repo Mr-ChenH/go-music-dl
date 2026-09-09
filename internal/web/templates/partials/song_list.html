@@ -66,6 +66,11 @@
             <input id="localMusicPageFileInput" type="file" multiple accept=".mp3,.flac,.m4a,.ogg,.wav,.wma,.aac,audio/*" onchange="uploadLocalMusicFile(this)" hidden>
             <input id="localMusicPageFolderInput" type="file" multiple webkitdirectory directory accept=".mp3,.flac,.m4a,.ogg,.wav,.wma,.aac,audio/*" onchange="uploadLocalMusicFile(this)" hidden>
             {{ end }}
+            {{ if gt .TotalCount 0 }}
+            <button type="button" class="ctrl-btn primary song-list-play-all" title="播放当前列表全部歌曲" onclick="playAllSongs()">
+                <i class="fa-solid fa-play"></i> 播放全部
+            </button>
+            {{ end }}
             <div class="song-list-tools" id="song-list-tools">
                 <button type="button" class="song-list-tools-trigger" id="song-list-tools-trigger" aria-expanded="false" aria-controls="song-list-tools-popover" onclick="toggleSongListTools(event)">
                     <i class="fa-solid fa-sliders"></i> 列表工具 <i class="fa-solid fa-chevron-down song-list-tools-chevron"></i>
@@ -112,9 +117,6 @@
                             <i class="fa-solid fa-triangle-exclamation"></i> 重复检测
                         </button>
                         {{ end }}
-                        <button type="button" class="song-list-tool-action is-primary" onclick="closeSongListTools(); playAllSongs()">
-                            <i class="fa-solid fa-play"></i> 播放全部
-                        </button>
                         <button type="button" class="song-list-tool-action" id="btn-batch-toggle" aria-pressed="false" onclick="closeSongListTools(); toggleBatchMode()">
                             <i class="fa-solid fa-list-check"></i> 批量操作
                         </button>

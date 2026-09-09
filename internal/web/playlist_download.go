@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ const (
 type PlaylistDownloadTask struct {
 	ID                uint      `gorm:"primaryKey" json:"id"`
 	PlaylistName      string    `gorm:"size:512;not null" json:"playlist_name"`
+	Cover             string    `gorm:"size:2048" json:"cover"`
 	Source            string    `gorm:"size:64;not null" json:"source"`
 	ExternalID        string    `gorm:"size:512;not null" json:"external_id"`
 	Status            string    `gorm:"size:32;not null;index" json:"status"`
@@ -365,6 +367,7 @@ func RegisterPlaylistDownloadRoutes(api *gin.RouterGroup) {
 
 		task := PlaylistDownloadTask{
 			PlaylistName: req.Name,
+			Cover:        strings.TrimSpace(req.Cover),
 			Source:       req.Source,
 			ExternalID:   req.ExternalID,
 			Status:       playlistTaskQueued,
@@ -376,6 +379,57 @@ func RegisterPlaylistDownloadRoutes(api *gin.RouterGroup) {
 		}
 		go runPlaylistDownloadTask(task.ID, req)
 		c.JSON(http.StatusAccepted, gin.H{"status": "queued", "task_id": task.ID})
+	})
+
+	api.GET("/api/downloads/playlists/:id/records", func(c *gin.Context) {
+		taskID64, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
+		if err != nil || taskID64 == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "下载任务 ID 无效"})
+			return
+		}
+		taskID := uint(taskID64)
+		var taskCount int64
+		if err := db.Model(&PlaylistDownloadTask{}).Where("id = ?", taskID).Count(&taskCount).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取下载任务失败"})
+			return
+		}
+		if taskCount == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "下载任务不存在"})
+			return
+		}
+
+		page, _ := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("page", "1")))
+		pageSize, _ := strconv.Atoi(strings.TrimSpace(c.DefaultQuery("page_size", "30")))
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 100 {
+			pageSize = 30
+		}
+		records, total, err := core.GetDownloadRecordPageForTask(taskID, page, pageSize)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		totalPages := 1
+		if total > 0 {
+			totalPages = int((total + int64(pageSize) - 1) / int64(pageSize))
+		}
+		if page > totalPages {
+			page = totalPages
+			records, total, err = core.GetDownloadRecordPageForTask(taskID, page, pageSize)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+		}
+		if records == nil {
+			records = []core.DownloadRecord{}
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"records": records, "page": page, "page_size": pageSize,
+			"total": total, "total_pages": totalPages,
+		})
 	})
 }
 

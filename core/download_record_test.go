@@ -64,6 +64,39 @@ func TestDownloadRecordStoresPlaylistTaskContext(t *testing.T) {
 	}
 }
 
+func TestGetDownloadRecordPageForTaskKeepsPlaylistSongsTogether(t *testing.T) {
+	baseDir := t.TempDir()
+	t.Setenv("MUSIC_DL_CONFIG_DB", filepath.Join(baseDir, "settings.db"))
+	resetConfigStateForTest()
+	t.Cleanup(resetConfigStateForTest)
+
+	for _, record := range []struct {
+		taskID uint
+		name   string
+	}{
+		{taskID: 7, name: "First in Seven"},
+		{taskID: 8, name: "Only in Eight"},
+		{taskID: 7, name: "Second in Seven"},
+	} {
+		if err := SaveDownloadRecordForTask(record.taskID, "Playlist", record.name, "Artist", "qq", DownloadStatusSuccess, ""); err != nil {
+			t.Fatalf("SaveDownloadRecordForTask(%q): %v", record.name, err)
+		}
+	}
+
+	records, total, err := GetDownloadRecordPageForTask(7, 1, 30)
+	if err != nil {
+		t.Fatalf("GetDownloadRecordPageForTask: %v", err)
+	}
+	if total != 2 || len(records) != 2 {
+		t.Fatalf("task page = %d records, total %d; want 2", len(records), total)
+	}
+	for _, record := range records {
+		if record.TaskID != 7 {
+			t.Fatalf("task page contains task %d, want only task 7", record.TaskID)
+		}
+	}
+}
+
 func TestGetDownloadRecordPageReturnsStablePagesAndTotal(t *testing.T) {
 	baseDir := t.TempDir()
 	t.Setenv("MUSIC_DL_CONFIG_DB", filepath.Join(baseDir, "settings.db"))

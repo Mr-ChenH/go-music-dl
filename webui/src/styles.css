@@ -172,6 +172,7 @@ input[type="text"]:focus, input[type="password"]:focus, input[type="url"]:focus,
 .list-header .result-count { color: var(--fluent-text); }
 .list-header .result-count .count, .playlist-source-link { color: var(--fluent-blue); }
 .page-summary { color: var(--fluent-muted); }
+.song-list-play-all { min-height: 34px; white-space: nowrap; }
 .result-list { gap: 8px; margin: 0; }
 .song-card { padding: 11px 12px; border-radius: 6px; outline-color: rgba(23,43,77,.1); }
 .song-card:hover { transform: translateY(-1px); box-shadow: var(--fluent-shadow-hover); }
@@ -448,6 +449,12 @@ input[type="text"]:focus, input[type="password"]:focus, input[type="url"]:focus,
   .source-name { font-size: 12px; }
   .source-desc { display: none; }
   .list-header { margin: 0 0 8px; }
+  .song-list-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+  .song-list-actions > .ctrl-btn,
+  .song-list-actions > .song-list-tools,
+  .song-list-tools-trigger { width: 100%; min-width: 0; justify-content: center; }
+  .song-list-actions > .song-list-tools { margin-left: 0; }
+  .song-list-actions > .local-music-upload-actions { grid-column: 1 / -1; }
   .result-list, .playlist-grid-container { padding: 0; }
   .song-card { padding: 10px; }
   .song-card .actions { grid-template-columns: repeat(3, 32px); grid-auto-rows: 32px; gap: 5px; }

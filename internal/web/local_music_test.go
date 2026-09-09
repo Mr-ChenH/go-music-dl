@@ -278,6 +278,8 @@ func TestLocalMusicPageRendersSongListWithoutUnsupportedActions(t *testing.T) {
 		`class="ctrl-btn local-music-upload-button is-file"`,
 		`class="ctrl-btn local-music-upload-button is-folder"`,
 		`id="song-list-tools-popover"`,
+		`class="ctrl-btn primary song-list-play-all"`,
+		`onclick="playAllSongs()"`,
 		`重复检测`,
 		`播放全部`,
 		`批量操作`,
@@ -304,6 +306,9 @@ func TestLocalMusicPageRendersSongListWithoutUnsupportedActions(t *testing.T) {
 		if !strings.Contains(body, token) {
 			t.Fatalf("local music page missing %q in rendered body: %s", token, body)
 		}
+	}
+	if count := strings.Count(body, `onclick="playAllSongs()"`); count != 1 {
+		t.Fatalf("play all action rendered %d times, want one direct action", count)
 	}
 
 	forbidden := []string{

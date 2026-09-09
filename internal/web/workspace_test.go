@@ -39,9 +39,14 @@ func TestActivityWorkspacesUseInternalScrollRegions(t *testing.T) {
 		"activity-workspace download-records-workspace",
 		"activity-workspace playback-history-workspace",
 		"activity-table-wrap activity-scroll-region",
+		"download-group-list activity-scroll-region",
 		"history-list activity-scroll-region",
-		"下载歌曲记录列表",
+		"全部下载歌曲记录",
+		"按歌单分组的下载任务",
 		"播放历史歌曲列表",
+		"download-group-progress",
+		"查看歌曲",
+		"收起歌曲",
 	} {
 		if !strings.Contains(js, want) {
 			t.Fatalf("activity workspace bundle missing %q", want)
@@ -59,6 +64,9 @@ func TestActivityWorkspacesUseInternalScrollRegions(t *testing.T) {
 		`body[data-workspace-view=downloads]`,
 		`body[data-workspace-view=history]`,
 		"overflow-y:auto",
+		".download-view-tabs",
+		".download-group-list",
+		".download-group-progress",
 	} {
 		if !strings.Contains(css, want) {
 			t.Fatalf("activity workspace styles missing %q", want)

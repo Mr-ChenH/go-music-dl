@@ -1262,7 +1262,7 @@ func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 		if records == nil {
 			records = []core.DownloadRecord{}
 		}
-		tasks, taskErr := listPlaylistDownloadTasks(20)
+		tasks, taskErr := listPlaylistDownloadTasks(100)
 		if taskErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": taskErr.Error()})
 			return
