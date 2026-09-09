@@ -104,9 +104,20 @@ func TestRunPlaylistDownloadTaskCompletesAndCreatesCollection(t *testing.T) {
 		return core.WebSettings{DownloadDir: filepath.Join(filepath.Dir(core.ConfigDBPath()), "downloads")}
 	}
 	playlistDownloadDedupProvider = func() (map[string]struct{}, error) { return map[string]struct{}{}, nil }
-	playlistDownloadSongSaver = func(song *model.Song, _ string, _, _ bool, _ string, _ map[string]struct{}, taskID uint, playlistName string) (*core.DownloadedSong, error) {
+	playlistDownloadSongSaver = func(song *model.Song, _ string, _, _ bool, _ string, _ map[string]struct{}, taskID uint, playlistName string, onProgress core.DownloadProgressFunc) (*core.DownloadedSong, error) {
 		if taskID == 0 || playlistName != "Downloaded Mix" {
 			t.Fatalf("download context = task %d playlist %q", taskID, playlistName)
+		}
+		if onProgress == nil {
+			t.Fatal("playlist saver missing progress callback")
+		}
+		onProgress(core.DownloadProgress{DownloadedBytes: 2 << 20, TotalBytes: 8 << 20, BytesPerSecond: 1 << 20})
+		var running PlaylistDownloadTask
+		if err := db.First(&running, taskID).Error; err != nil {
+			t.Fatalf("reload running task: %v", err)
+		}
+		if running.CurrentSong == "" || running.CurrentIndex == 0 || running.CurrentBytes != 2<<20 || running.CurrentTotalBytes != 8<<20 || running.CurrentSpeed != 1<<20 || running.StartedAt == nil {
+			t.Fatalf("running task missing live progress: %+v", running)
 		}
 		return &core.DownloadedSong{}, nil
 	}
@@ -235,7 +246,7 @@ func TestPlaylistDownloadUIExposesTaskEntryAndProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(react-app.js): %v", err)
 	}
-	for _, want := range []string{"playlist_tasks", "歌单任务", "打开我的歌单", "/api/downloads/playlists/"} {
+	for _, want := range []string{"playlist_tasks", "歌单任务", "正在下载", "实时速率", "current_speed", "current_total_bytes", "打开我的歌单", "/api/downloads/playlists/"} {
 		if !strings.Contains(string(reactBundle), want) {
 			t.Fatalf("React bundle missing %q", want)
 		}

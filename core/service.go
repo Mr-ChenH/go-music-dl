@@ -1258,6 +1258,71 @@ func normalizeCoverMime(coverMime string) string {
 }
 
 func FetchBytesWithMime(urlStr string, source string) ([]byte, string, error) {
+	return FetchBytesWithMimeProgress(urlStr, source, nil)
+}
+
+type downloadProgressWriter struct {
+	writer         io.Writer
+	onProgress     DownloadProgressFunc
+	total          int64
+	startedAt      time.Time
+	lastReportedAt time.Time
+	lastBytes      int64
+	downloaded     int64
+}
+
+func newDownloadProgressWriter(writer io.Writer, total int64, onProgress DownloadProgressFunc) *downloadProgressWriter {
+	if total < 0 {
+		total = 0
+	}
+	progress := &downloadProgressWriter{
+		writer: writer, onProgress: onProgress, total: total, startedAt: time.Now(),
+	}
+	if onProgress != nil {
+		onProgress(DownloadProgress{TotalBytes: total})
+	}
+	return progress
+}
+
+func (w *downloadProgressWriter) Write(data []byte) (int, error) {
+	n, err := w.writer.Write(data)
+	if n <= 0 || w.onProgress == nil {
+		return n, err
+	}
+
+	w.downloaded += int64(n)
+	now := time.Now()
+	if w.lastReportedAt.IsZero() || now.Sub(w.lastReportedAt) >= 500*time.Millisecond || (w.total > 0 && w.downloaded >= w.total) {
+		elapsed := now.Sub(w.lastReportedAt).Seconds()
+		bytesSinceReport := w.downloaded - w.lastBytes
+		if w.lastReportedAt.IsZero() {
+			elapsed = now.Sub(w.startedAt).Seconds()
+			bytesSinceReport = w.downloaded
+		}
+		speed := float64(0)
+		if elapsed > 0 {
+			speed = float64(bytesSinceReport) / elapsed
+		}
+		w.lastReportedAt = now
+		w.lastBytes = w.downloaded
+		w.onProgress(DownloadProgress{DownloadedBytes: w.downloaded, TotalBytes: w.total, BytesPerSecond: speed})
+	}
+	return n, err
+}
+
+func (w *downloadProgressWriter) finish() {
+	if w.onProgress == nil || w.downloaded == w.lastBytes {
+		return
+	}
+	elapsed := time.Since(w.lastReportedAt).Seconds()
+	speed := float64(0)
+	if elapsed > 0 {
+		speed = float64(w.downloaded-w.lastBytes) / elapsed
+	}
+	w.onProgress(DownloadProgress{DownloadedBytes: w.downloaded, TotalBytes: w.total, BytesPerSecond: speed})
+}
+
+func FetchBytesWithMimeProgress(urlStr string, source string, onProgress DownloadProgressFunc) ([]byte, string, error) {
 	if fetch, handled, err := NewSourceRangeFetch(urlStr, source, ""); handled || err != nil {
 		if err != nil {
 			return nil, "", err
@@ -1266,15 +1331,21 @@ func FetchBytesWithMime(urlStr string, source string) ([]byte, string, error) {
 		if fetch.ContentLength > 0 && fetch.ContentLength <= int64(1<<(strconv.IntSize-1)-1) {
 			buf.Grow(int(fetch.ContentLength))
 		}
-		if err := fetch.WriteTo(&buf); err != nil {
+		progress := newDownloadProgressWriter(&buf, fetch.ContentLength, onProgress)
+		if err := fetch.WriteTo(progress); err != nil {
 			return nil, "", err
 		}
+		progress.finish()
 		return buf.Bytes(), fetch.ContentType, nil
 	}
-	return fetchBytesSingle(urlStr, source)
+	return fetchBytesSingleProgress(urlStr, source, onProgress)
 }
 
 func fetchBytesSingle(urlStr string, source string) ([]byte, string, error) {
+	return fetchBytesSingleProgress(urlStr, source, nil)
+}
+
+func fetchBytesSingleProgress(urlStr string, source string, onProgress DownloadProgressFunc) ([]byte, string, error) {
 	req, err := BuildSourceRequest("GET", urlStr, source, "")
 	if err != nil {
 		return nil, "", err
@@ -1291,11 +1362,16 @@ func fetchBytesSingle(urlStr string, source string) ([]byte, string, error) {
 		return nil, "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
+	var buf bytes.Buffer
+	if resp.ContentLength > 0 && resp.ContentLength <= int64(1<<(strconv.IntSize-1)-1) {
+		buf.Grow(int(resp.ContentLength))
+	}
+	progress := newDownloadProgressWriter(&buf, resp.ContentLength, onProgress)
+	if _, err := io.Copy(progress, resp.Body); err != nil {
 		return nil, "", err
 	}
-
+	progress.finish()
+	data := buf.Bytes()
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	if contentType == "" && len(data) > 0 {
 		contentType = http.DetectContentType(data)

@@ -28,22 +28,27 @@ const (
 
 // PlaylistDownloadTask is the durable summary displayed above per-song records.
 type PlaylistDownloadTask struct {
-	ID                uint      `gorm:"primaryKey" json:"id"`
-	PlaylistName      string    `gorm:"size:512;not null" json:"playlist_name"`
-	Cover             string    `gorm:"size:2048" json:"cover"`
-	Source            string    `gorm:"size:64;not null" json:"source"`
-	ExternalID        string    `gorm:"size:512;not null" json:"external_id"`
-	Status            string    `gorm:"size:32;not null;index" json:"status"`
-	Total             int       `json:"total"`
-	Completed         int       `json:"completed"`
-	Success           int       `json:"success"`
-	Skipped           int       `json:"skipped"`
-	Failed            int       `json:"failed"`
-	CurrentSong       string    `gorm:"size:512" json:"current_song"`
-	Error             string    `gorm:"size:2048" json:"error"`
-	LocalCollectionID uint      `json:"local_collection_id"`
-	CreatedAt         time.Time `gorm:"autoCreateTime;index" json:"created_at"`
-	UpdatedAt         time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+	ID                uint       `gorm:"primaryKey" json:"id"`
+	PlaylistName      string     `gorm:"size:512;not null" json:"playlist_name"`
+	Cover             string     `gorm:"size:2048" json:"cover"`
+	Source            string     `gorm:"size:64;not null" json:"source"`
+	ExternalID        string     `gorm:"size:512;not null" json:"external_id"`
+	Status            string     `gorm:"size:32;not null;index" json:"status"`
+	Total             int        `json:"total"`
+	Completed         int        `json:"completed"`
+	Success           int        `json:"success"`
+	Skipped           int        `json:"skipped"`
+	Failed            int        `json:"failed"`
+	CurrentSong       string     `gorm:"size:512" json:"current_song"`
+	CurrentIndex      int        `json:"current_index"`
+	CurrentBytes      int64      `json:"current_bytes"`
+	CurrentTotalBytes int64      `json:"current_total_bytes"`
+	CurrentSpeed      int64      `json:"current_speed"`
+	StartedAt         *time.Time `json:"started_at,omitempty"`
+	Error             string     `gorm:"size:2048" json:"error"`
+	LocalCollectionID uint       `json:"local_collection_id"`
+	CreatedAt         time.Time  `gorm:"autoCreateTime;index" json:"created_at"`
+	UpdatedAt         time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 type playlistDownloadRequest struct {
@@ -63,7 +68,7 @@ var (
 	playlistDownloadSongsLoader      = loadImportedCollectionSongs
 	playlistDownloadSettingsProvider = core.GetWebSettings
 	playlistDownloadDedupProvider    = core.LoadDownloadDedupSet
-	playlistDownloadSongSaver        = core.DownloadWithDedupCheckForTask
+	playlistDownloadSongSaver        = core.DownloadWithDedupCheckForTaskProgress
 	playlistDownloadSavedSongBuilder = savedSongFromDownloadedFile
 )
 
@@ -77,9 +82,13 @@ func initPlaylistDownloadTasks() error {
 	return db.Model(&PlaylistDownloadTask{}).
 		Where("status IN ?", []string{playlistTaskQueued, playlistTaskResolving, playlistTaskDownloading}).
 		Updates(map[string]interface{}{
-			"status":       playlistTaskFailed,
-			"current_song": "",
-			"error":        "服务重启，下载任务已中断",
+			"status":              playlistTaskFailed,
+			"current_song":        "",
+			"current_index":       0,
+			"current_bytes":       0,
+			"current_total_bytes": 0,
+			"current_speed":       0,
+			"error":               "服务重启，下载任务已中断",
 		}).Error
 }
 
@@ -235,9 +244,13 @@ func runPlaylistDownloadTask(taskID uint, req playlistDownloadRequest) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			updatePlaylistDownloadTask(taskID, map[string]interface{}{
-				"status":       playlistTaskFailed,
-				"current_song": "",
-				"error":        fmt.Sprintf("下载任务异常终止: %v", recovered),
+				"status":              playlistTaskFailed,
+				"current_song":        "",
+				"current_index":       0,
+				"current_bytes":       0,
+				"current_total_bytes": 0,
+				"current_speed":       0,
+				"error":               fmt.Sprintf("下载任务异常终止: %v", recovered),
 			})
 		}
 	}()
@@ -273,16 +286,24 @@ func runPlaylistDownloadTask(taskID uint, req playlistDownloadRequest) {
 		updatePlaylistDownloadTask(taskID, map[string]interface{}{"status": playlistTaskFailed, "error": err.Error()})
 		return
 	}
+	startedAt := time.Now()
 	updatePlaylistDownloadTask(taskID, map[string]interface{}{
-		"status": playlistTaskDownloading,
-		"total":  len(songs),
+		"status":     playlistTaskDownloading,
+		"total":      len(songs),
+		"started_at": startedAt,
 	})
 
 	localSongs := make([]SavedSong, 0, len(songs))
 	success, skipped, failed := 0, 0, 0
 	for index := range songs {
 		song := songs[index]
-		updatePlaylistDownloadTask(taskID, map[string]interface{}{"current_song": playlistTaskSongLabel(song)})
+		updatePlaylistDownloadTask(taskID, map[string]interface{}{
+			"current_song":        playlistTaskSongLabel(song),
+			"current_index":       index + 1,
+			"current_bytes":       0,
+			"current_total_bytes": 0,
+			"current_speed":       0,
+		})
 		result, downloadErr := playlistDownloadSongSaver(
 			&song,
 			settings.DownloadDir,
@@ -292,6 +313,13 @@ func runPlaylistDownloadTask(taskID uint, req playlistDownloadRequest) {
 			dedupSet,
 			taskID,
 			req.Name,
+			func(progress core.DownloadProgress) {
+				updatePlaylistDownloadTask(taskID, map[string]interface{}{
+					"current_bytes":       progress.DownloadedBytes,
+					"current_total_bytes": progress.TotalBytes,
+					"current_speed":       int64(progress.BytesPerSecond),
+				})
+			},
 		)
 		if downloadErr != nil {
 			failed++
@@ -327,6 +355,10 @@ func runPlaylistDownloadTask(taskID uint, req playlistDownloadRequest) {
 	updatePlaylistDownloadTask(taskID, map[string]interface{}{
 		"status":              status,
 		"current_song":        "",
+		"current_index":       0,
+		"current_bytes":       0,
+		"current_total_bytes": 0,
+		"current_speed":       0,
 		"error":               errText,
 		"local_collection_id": collectionID,
 	})

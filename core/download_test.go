@@ -1,12 +1,42 @@
 package core
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/guohuiyuan/music-lib/model"
 )
+
+func TestDownloadProgressWriterReportsBytesTotalAndSpeed(t *testing.T) {
+	var target bytes.Buffer
+	updates := make([]DownloadProgress, 0, 3)
+	writer := newDownloadProgressWriter(&target, 8, func(progress DownloadProgress) {
+		updates = append(updates, progress)
+	})
+
+	if _, err := writer.Write([]byte("music")); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	if _, err := writer.Write([]byte("-dl")); err != nil {
+		t.Fatal(err)
+	}
+	writer.finish()
+
+	if target.String() != "music-dl" {
+		t.Fatalf("written data = %q, want music-dl", target.String())
+	}
+	if len(updates) < 3 {
+		t.Fatalf("progress updates = %+v, want initial, streaming, and final updates", updates)
+	}
+	last := updates[len(updates)-1]
+	if last.DownloadedBytes != 8 || last.TotalBytes != 8 || last.BytesPerSecond <= 0 {
+		t.Fatalf("final progress = %+v, want 8/8 bytes and positive speed", last)
+	}
+}
 
 func TestBuildDownloadFilenameUsesTemplate(t *testing.T) {
 	song := &model.Song{

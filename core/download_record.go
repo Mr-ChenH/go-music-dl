@@ -254,6 +254,10 @@ func DownloadWithDedupCheckWithTemplate(song *model.Song, outDir string, withCov
 }
 
 func DownloadWithDedupCheckForTask(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet map[string]struct{}, taskID uint, playlistName string) (*DownloadedSong, error) {
+	return DownloadWithDedupCheckForTaskProgress(song, outDir, withCover, withLyrics, filenameTemplate, dedupSet, taskID, playlistName, nil)
+}
+
+func DownloadWithDedupCheckForTaskProgress(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet map[string]struct{}, taskID uint, playlistName string, onProgress DownloadProgressFunc) (*DownloadedSong, error) {
 	key := SongKey(song)
 	if IsSongDownloaded(song, dedupSet) {
 		_ = SaveDownloadRecordForTask(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusSkipped, "")
@@ -264,11 +268,7 @@ func DownloadWithDedupCheckForTask(song *model.Song, outDir string, withCover, w
 		result *DownloadedSong
 		dlErr  error
 	)
-	if filenameTemplate == "" {
-		result, dlErr = SaveSongToFile(song, outDir, withCover, withLyrics)
-	} else {
-		result, dlErr = SaveSongToFileWithTemplate(song, outDir, withCover, withLyrics, filenameTemplate)
-	}
+	result, dlErr = SaveSongToFileWithTemplateProgress(song, outDir, withCover, withLyrics, filenameTemplate, onProgress)
 	if dlErr != nil {
 		_ = SaveDownloadRecordForTask(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusFailed, dlErr.Error())
 		return result, dlErr

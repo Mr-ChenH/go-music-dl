@@ -100,6 +100,26 @@ function formatTime(value) {
   return `${minutes}:${String(Math.floor(seconds % 60)).padStart(2, "0")}`;
 }
 
+function formatBytes(value) {
+  const bytes = Math.max(0, Number(value || 0));
+  if (!Number.isFinite(bytes) || bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const unit = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+  const amount = bytes / (1024 ** unit);
+  return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
+}
+
+function formatDurationLabel(value) {
+  const seconds = Math.max(0, Math.round(Number(value || 0)));
+  if (!Number.isFinite(seconds) || seconds === 0) return "";
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return remainder ? `${hours} 小时 ${remainder} 分` : `${hours} 小时`;
+}
+
 function PageButton({ disabled, label, onClick, children }) {
   return <button type="button" className="workspace-icon-button" disabled={disabled} onClick={onClick} aria-label={label} title={label}>{children}</button>;
 }
@@ -132,12 +152,26 @@ function playlistTaskPresentation(task) {
   return { total, completed, percent, statusMeta };
 }
 
+function playlistTaskLiveMetrics(task, total, completed) {
+  const bytes = Math.max(0, Number(task?.current_bytes || 0));
+  const totalBytes = Math.max(0, Number(task?.current_total_bytes || 0));
+  const speed = Math.max(0, Number(task?.current_speed || 0));
+  const trackPercent = totalBytes > 0 ? Math.min(100, Math.round((bytes / totalBytes) * 100)) : 0;
+  const startedAt = new Date(task?.started_at || 0).getTime();
+  const elapsedSeconds = Number.isFinite(startedAt) && startedAt > 0 ? Math.max(0, (Date.now() - startedAt) / 1000) : 0;
+  const remainingSongs = Math.max(0, total - completed);
+  const etaSeconds = completed > 0 && elapsedSeconds > 0 ? (elapsedSeconds / completed) * remainingSongs : 0;
+  return { bytes, totalBytes, speed, trackPercent, elapsedSeconds, etaSeconds };
+}
+
 function PlaylistDownloadGroup({ task, apiRoot, openLocalPlaylist, expanded, onToggle }) {
   const [page, setPage] = useState(1);
   const [details, setDetails] = useState({ records: [], total: 0, total_pages: 1 });
   const [detailsState, setDetailsState] = useState("idle");
   const { total, completed, percent, statusMeta } = playlistTaskPresentation(task);
   const active = ACTIVE_PLAYLIST_TASK_STATUSES.has(task.status);
+  const live = playlistTaskLiveMetrics(task, total, completed);
+  const currentLabel = task.current_song || (task.status === "queued" ? "等待进入下载队列" : task.status === "resolving" ? "正在获取歌单歌曲" : "正在准备歌曲");
 
   const loadDetails = useCallback(async (targetPage = 1) => {
     setDetailsState("loading");
@@ -167,7 +201,7 @@ function PlaylistDownloadGroup({ task, apiRoot, openLocalPlaylist, expanded, onT
           <span className="download-group-cover">{task.cover ? <><img src={task.cover} alt="" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.nextElementSibling?.removeAttribute("hidden"); }} /><MusicNote224Regular hidden /></> : <MusicNote224Regular />}</span>
           <span className="download-group-copy">
             <span><strong>{task.playlist_name || "未命名歌单"}</strong><span className="source-badge">{task.source || "-"}</span></span>
-            <small>{active ? task.current_song || "正在准备歌曲" : formatDate(task.updated_at || task.created_at)}</small>
+            {!active ? <small>{formatDate(task.updated_at || task.created_at)}</small> : null}
           </span>
         </button>
         <div className="download-group-result">
@@ -176,7 +210,19 @@ function PlaylistDownloadGroup({ task, apiRoot, openLocalPlaylist, expanded, onT
           {task.local_collection_id ? <button type="button" className="workspace-icon-button" onClick={() => openLocalPlaylist(task.local_collection_id)} aria-label={`打开歌单 ${task.playlist_name || ""}`} title="打开我的歌单"><FolderOpen24Regular /></button> : null}
           <button type="button" className="workspace-icon-button" onClick={toggle} aria-label={expanded ? "收起歌曲" : "查看歌曲"} title={expanded ? "收起歌曲" : "查看歌曲"}>{expanded ? <ChevronUp24Regular /> : <ChevronDown24Regular />}</button>
         </div>
-        <div className="download-group-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
+        {active ? <div className="download-group-live" aria-live="polite">
+          <div className="download-group-current">
+            <span>正在下载{task.current_index ? ` · 第 ${task.current_index}${total ? ` / ${total}` : ""} 首` : ""}</span>
+            <strong title={currentLabel}>{currentLabel}</strong>
+          </div>
+          <div className="download-group-live-metrics">
+            <span><b>{live.speed > 0 ? `${formatBytes(live.speed)}/s` : "计算中"}</b><small>实时速率</small></span>
+            <span><b>{live.totalBytes > 0 ? `${formatBytes(live.bytes)} / ${formatBytes(live.totalBytes)}` : live.bytes > 0 ? formatBytes(live.bytes) : "等待数据"}</b><small>当前歌曲</small></span>
+            <span><b>{live.etaSeconds > 0 ? `约 ${formatDurationLabel(live.etaSeconds)}` : live.elapsedSeconds > 0 ? formatDurationLabel(live.elapsedSeconds) : "计算中"}</b><small>{live.etaSeconds > 0 ? "预计剩余" : "任务耗时"}</small></span>
+          </div>
+          <div className="download-group-track-progress" aria-label="当前歌曲下载进度"><span style={{ width: `${live.trackPercent}%` }} /></div>
+        </div> : null}
+        <div className="download-group-progress" role="progressbar" aria-label="歌单任务进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow={percent}><span style={{ width: `${percent}%` }} /></div>
       </div>
 
       {expanded ? <div className="download-group-details">

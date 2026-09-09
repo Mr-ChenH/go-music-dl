@@ -12,6 +12,14 @@ import (
 	"github.com/guohuiyuan/music-lib/utils"
 )
 
+type DownloadProgress struct {
+	DownloadedBytes int64
+	TotalBytes      int64
+	BytesPerSecond  float64
+}
+
+type DownloadProgressFunc func(DownloadProgress)
+
 type DownloadedSong struct {
 	Data        []byte
 	Ext         string
@@ -27,6 +35,10 @@ func DownloadSongData(song *model.Song, withCover bool, withLyrics bool) (*Downl
 }
 
 func DownloadSongDataWithTemplate(song *model.Song, withCover bool, withLyrics bool, filenameTemplate string) (*DownloadedSong, error) {
+	return DownloadSongDataWithTemplateProgress(song, withCover, withLyrics, filenameTemplate, nil)
+}
+
+func DownloadSongDataWithTemplateProgress(song *model.Song, withCover bool, withLyrics bool, filenameTemplate string, onProgress DownloadProgressFunc) (*DownloadedSong, error) {
 	if song == nil {
 		return nil, errors.New("song is nil")
 	}
@@ -45,7 +57,7 @@ func DownloadSongDataWithTemplate(song *model.Song, withCover bool, withLyrics b
 		normalized.Artist = "Unknown"
 	}
 
-	audioData, contentType, err := fetchSongAudio(&normalized)
+	audioData, contentType, err := fetchSongAudio(&normalized, onProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +116,11 @@ func SaveSongToFile(song *model.Song, outDir string, withCover bool, withLyrics 
 }
 
 func SaveSongToFileWithTemplate(song *model.Song, outDir string, withCover bool, withLyrics bool, filenameTemplate string) (*DownloadedSong, error) {
-	result, err := DownloadSongDataWithTemplate(song, withCover, withLyrics, filenameTemplate)
+	return SaveSongToFileWithTemplateProgress(song, outDir, withCover, withLyrics, filenameTemplate, nil)
+}
+
+func SaveSongToFileWithTemplateProgress(song *model.Song, outDir string, withCover bool, withLyrics bool, filenameTemplate string, onProgress DownloadProgressFunc) (*DownloadedSong, error) {
+	result, err := DownloadSongDataWithTemplateProgress(song, withCover, withLyrics, filenameTemplate, onProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -229,6 +245,10 @@ func sanitizeDownloadPathSegment(value string) string {
 
 // FetchDecryptedSodaAudio 下载并解密 soda（汽水）加密音频流，返回明文音频字节。
 func FetchDecryptedSodaAudio(song *model.Song) ([]byte, error) {
+	return fetchDecryptedSodaAudio(song, nil)
+}
+
+func fetchDecryptedSodaAudio(song *model.Song, onProgress DownloadProgressFunc) ([]byte, error) {
 	cookie := CM.Get("soda")
 	sodaInst := soda.New(cookie)
 	info, err := sodaInst.GetDownloadInfo(song)
@@ -236,7 +256,7 @@ func FetchDecryptedSodaAudio(song *model.Song) ([]byte, error) {
 		return nil, err
 	}
 
-	encryptedData, _, err := FetchBytesWithMime(info.URL, "soda")
+	encryptedData, _, err := FetchBytesWithMimeProgress(info.URL, "soda", onProgress)
 	if err != nil {
 		return nil, err
 	}
@@ -248,9 +268,9 @@ func FetchDecryptedSodaAudio(song *model.Song) ([]byte, error) {
 	return soda.DecryptAudio(encryptedData, info.PlayAuth)
 }
 
-func fetchSongAudio(song *model.Song) ([]byte, string, error) {
+func fetchSongAudio(song *model.Song, onProgress DownloadProgressFunc) ([]byte, string, error) {
 	if song.Source == "soda" {
-		finalData, err := FetchDecryptedSodaAudio(song)
+		finalData, err := fetchDecryptedSodaAudio(song, onProgress)
 		if err != nil {
 			return nil, "", err
 		}
@@ -270,5 +290,5 @@ func fetchSongAudio(song *model.Song) ([]byte, string, error) {
 		return nil, "", errors.New("empty download url")
 	}
 
-	return FetchBytesWithMime(urlStr, song.Source)
+	return FetchBytesWithMimeProgress(urlStr, song.Source, onProgress)
 }

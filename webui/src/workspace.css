@@ -181,6 +181,16 @@ body.player-lyrics-unavailable .aplayer.aplayer-fixed .aplayer-lrc { display: no
 .download-group-result { display: flex; align-items: center; gap: 8px; }
 .download-group-fraction { min-width: 48px; color: var(--fluent-muted); font-size: 11px; font-variant-numeric: tabular-nums; text-align: right; }
 .download-group-result .workspace-icon-button { width: 32px; min-height: 32px; }
+.download-group-live { min-width: 0; grid-column: 1 / -1; display: grid; grid-template-columns: minmax(180px, 1fr) auto; align-items: end; gap: 5px 18px; padding: 1px 0 3px 58px; }
+.download-group-current { min-width: 0; display: grid; gap: 2px; }
+.download-group-current > span { color: var(--fluent-blue); font-size: 9px; font-weight: 650; }
+.download-group-current > strong { overflow: hidden; color: var(--fluent-text); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.download-group-live-metrics { display: grid; grid-template-columns: repeat(3, minmax(86px, auto)); gap: 16px; }
+.download-group-live-metrics > span { display: grid; gap: 1px; }
+.download-group-live-metrics b { color: var(--fluent-text); font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+.download-group-live-metrics small { color: var(--fluent-subtle); font-size: 8px; }
+.download-group-track-progress { height: 3px; grid-column: 1 / -1; overflow: hidden; border-radius: 2px; background: #e5e5e5; }
+.download-group-track-progress > span { height: 100%; display: block; border-radius: inherit; background: #36a3f7; transition: width 250ms ease; }
 .download-group-progress { position: absolute; left: 68px; right: 10px; bottom: 5px; height: 3px; overflow: hidden; border-radius: 2px; background: #e5e5e5; }
 .download-group-progress > span { height: 100%; display: block; border-radius: inherit; background: var(--fluent-blue); transition: width 250ms ease; }
 .download-group:not(.is-active) .download-group-progress > span { background: #8a8886; }
@@ -376,13 +386,19 @@ body[data-workspace-view="history"] { height: 100dvh; overflow: hidden; }
   .download-view-tabs button { min-height: 43px; }
   .download-group-list { padding: 8px; }
   .download-group-summary { min-height: 68px; gap: 6px; padding: 7px 8px 10px; }
+  .download-group.is-active .download-group-summary { min-height: 138px; align-content: start; }
   .download-group-main { grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
   .download-group-cover { width: 44px; height: 44px; }
   .download-group-copy > span { gap: 5px; }
   .download-group-copy strong { font-size: 12px; }
   .download-group-result { gap: 5px; }
   .download-group-fraction { display: none; }
-  .download-group-progress { left: 60px; right: 8px; }
+  .download-group-live { grid-template-columns: 1fr; gap: 6px; padding: 2px 0 3px; }
+  .download-group-current { grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 6px; }
+  .download-group-live-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .download-group-live-metrics > span { min-width: 0; }
+  .download-group-live-metrics b { overflow: hidden; font-size: 9px; text-overflow: ellipsis; }
+  .download-group-progress { left: 8px; right: 8px; }
   .download-group-details > header { align-items: flex-start; flex-direction: column; gap: 2px; }
   .download-group-track { grid-template-columns: minmax(0, 1fr) auto; padding: 7px 9px; }
   .download-group-track time { display: none; }
