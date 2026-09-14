@@ -523,6 +523,35 @@ func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 		c.JSON(http.StatusOK, gin.H{"source": source, "playlists": playlists})
 	})
 
+	api.GET("/api/playlist/user", func(c *gin.Context) {
+		source := strings.TrimSpace(c.Query("source"))
+		fn := core.GetUserPlaylistsFunc(source)
+		if source == "" || fn == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_source"})
+			return
+		}
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+		if page < 1 {
+			page = 1
+		}
+		if limit < 1 || limit > 100 {
+			limit = 50
+		}
+		playlists, err := fn(page, limit)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "user_playlists_unavailable"})
+			return
+		}
+		if len(playlists) > 100 {
+			playlists = playlists[:100]
+		}
+		for i := range playlists {
+			playlists[i].Source = source
+		}
+		c.JSON(http.StatusOK, gin.H{"source": source, "page": page, "limit": limit, "playlists": playlists})
+	})
+
 	api.GET("/api/playlist/category", func(c *gin.Context) {
 		source := strings.TrimSpace(c.Query("source"))
 		categoryID := strings.TrimSpace(c.Query("category_id"))

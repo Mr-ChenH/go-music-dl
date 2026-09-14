@@ -62,6 +62,7 @@ Web 模式默认不要求登录即可搜索、播放、下载、浏览歌单 / �
 GET /music/api/playlist/sources
 GET /music/api/playlist/categories?source=netease
 GET /music/api/playlist/recommend?source=netease
+GET /music/api/playlist/user?source=netease&page=1&limit=100
 GET /music/api/playlist/search?source=netease&q=关键词
 GET /music/api/playlist/category?source=netease&category_id=华语&page=1&page_size=60
 GET /music/api/playlist/songs?source=netease&id=歌单ID
