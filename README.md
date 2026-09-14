@@ -56,6 +56,19 @@ Web 模式默认不要求登录即可搜索、播放、下载、浏览歌单 / �
 
 桌面端和移动端 App 内嵌 Web 服务使用 `StartDesktop` 启动，仅监听本机 `127.0.0.1`，并默认关闭 Web 管理员登录流程，避免首次启动时因看不到终端初始化令牌而无法进入应用。
 
+桌面集成可使用以下只读 JSON 接口浏览平台在线歌单（接口仍受各平台登录状态、Cookie 和 provider 能力限制）：
+
+```text
+GET /music/api/playlist/sources
+GET /music/api/playlist/categories?source=netease
+GET /music/api/playlist/recommend?source=netease
+GET /music/api/playlist/search?source=netease&q=关键词
+GET /music/api/playlist/category?source=netease&category_id=华语&page=1&page_size=60
+GET /music/api/playlist/songs?source=netease&id=歌单ID
+```
+
+这些接口只返回规范化歌单、分类和歌曲元数据；音频仍通过已有的 `/music/download?stream=1` 接口获取。TO-DO Panel 等本机客户端应固定连接回环地址，不应把这些接口暴露到公网。
+
 ### TUI 模式
 
 ```bash

@@ -430,6 +430,150 @@ func playlistCategoryPlaylistsURL(source string, category model.PlaylistCategory
 
 func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 
+	// JSON endpoints for local desktop clients. The HTML routes below remain the
+	// browser-facing UI; these endpoints expose only normalized public metadata
+	// and delegate platform access, cookies, and rate limits to the provider layer.
+	api.GET("/api/playlist/sources", func(c *gin.Context) {
+		type sourceInfo struct {
+			ID         string `json:"id"`
+			Name       string `json:"name"`
+			Search     bool   `json:"search"`
+			Categories bool   `json:"categories"`
+			Recommend  bool   `json:"recommend"`
+			User       bool   `json:"user_playlists"`
+		}
+		sources := make([]sourceInfo, 0)
+		for _, source := range core.GetPlaylistSourceNames() {
+			sources = append(sources, sourceInfo{
+				ID: source, Name: core.GetSourceDescription(source),
+				Search:     core.GetPlaylistSearchFunc(source) != nil,
+				Categories: core.GetPlaylistCategoriesFunc(source) != nil,
+				Recommend:  core.GetRecommendFunc(source) != nil,
+				User:       core.GetUserPlaylistsFunc(source) != nil,
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"sources": sources})
+	})
+
+	api.GET("/api/playlist/categories", func(c *gin.Context) {
+		source := strings.TrimSpace(c.Query("source"))
+		fn := core.GetPlaylistCategoriesFunc(source)
+		if source == "" || fn == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_source"})
+			return
+		}
+		categories, err := fn()
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "categories_unavailable"})
+			return
+		}
+		if len(categories) > 500 {
+			categories = categories[:500]
+		}
+		for i := range categories {
+			categories[i].Source = source
+		}
+		c.JSON(http.StatusOK, gin.H{"source": source, "categories": categories})
+	})
+
+	api.GET("/api/playlist/search", func(c *gin.Context) {
+		source := strings.TrimSpace(c.Query("source"))
+		keyword := strings.TrimSpace(c.Query("q"))
+		fn := core.GetPlaylistSearchFunc(source)
+		if source == "" || fn == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_source"})
+			return
+		}
+		if keyword == "" || len([]rune(keyword)) > 120 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_keyword"})
+			return
+		}
+		playlists, err := fn(keyword)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "playlist_search_unavailable"})
+			return
+		}
+		if len(playlists) > 120 {
+			playlists = playlists[:120]
+		}
+		for i := range playlists {
+			playlists[i].Source = source
+		}
+		c.JSON(http.StatusOK, gin.H{"source": source, "keyword": keyword, "playlists": playlists})
+	})
+
+	api.GET("/api/playlist/recommend", func(c *gin.Context) {
+		source := strings.TrimSpace(c.Query("source"))
+		fn := core.GetRecommendFunc(source)
+		if source == "" || fn == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_source"})
+			return
+		}
+		playlists, err := fn()
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "recommended_playlists_unavailable"})
+			return
+		}
+		if len(playlists) > 60 {
+			playlists = playlists[:60]
+		}
+		for i := range playlists {
+			playlists[i].Source = source
+		}
+		c.JSON(http.StatusOK, gin.H{"source": source, "playlists": playlists})
+	})
+
+	api.GET("/api/playlist/category", func(c *gin.Context) {
+		source := strings.TrimSpace(c.Query("source"))
+		categoryID := strings.TrimSpace(c.Query("category_id"))
+		fn := core.GetCategoryPlaylistsFunc(source)
+		if source == "" || fn == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported_source"})
+			return
+		}
+		page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+		pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "60"))
+		if page < 1 {
+			page = 1
+		}
+		if pageSize < 1 || pageSize > 120 {
+			pageSize = 60
+		}
+		playlists, err := fn(categoryID, page, pageSize)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "category_playlists_unavailable"})
+			return
+		}
+		for i := range playlists {
+			playlists[i].Source = source
+		}
+		c.JSON(http.StatusOK, gin.H{"source": source, "category_id": categoryID, "page": page, "page_size": pageSize, "playlists": playlists})
+	})
+
+	api.GET("/api/playlist/songs", func(c *gin.Context) {
+		source := strings.TrimSpace(c.Query("source"))
+		playlistID := strings.TrimSpace(c.Query("id"))
+		fn := core.GetPlaylistDetailFunc(source)
+		if source == "" || playlistID == "" || fn == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_playlist"})
+			return
+		}
+		songs, err := fn(playlistID)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "playlist_songs_unavailable"})
+			return
+		}
+		if len(songs) > 1000 {
+			songs = songs[:1000]
+		}
+		for i := range songs {
+			if strings.TrimSpace(songs[i].Source) == "" {
+				songs[i].Source = source
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"source": source, "playlist_id": playlistID, "songs": songs})
+	})
+
 	api.GET("/", func(c *gin.Context) {
 		renderIndex(c, nil, nil, "", nil, "", "song", "", "", "", false, "", nil)
 	})
