@@ -10,12 +10,7 @@ import (
 )
 
 func resetCollectionStateForTest() {
-	if db != nil {
-		if sqlDB, err := db.DB(); err == nil {
-			_ = sqlDB.Close()
-		}
-	}
-	db = nil
+	CloseDB()
 }
 
 func TestInitDBUsesUnifiedSettingsDatabase(t *testing.T) {

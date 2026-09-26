@@ -103,8 +103,8 @@ func TestRunPlaylistDownloadTaskCompletesAndCreatesCollection(t *testing.T) {
 	playlistDownloadSettingsProvider = func() core.WebSettings {
 		return core.WebSettings{DownloadDir: filepath.Join(filepath.Dir(core.ConfigDBPath()), "downloads")}
 	}
-	playlistDownloadDedupProvider = func() (map[string]struct{}, error) { return map[string]struct{}{}, nil }
-	playlistDownloadSongSaver = func(song *model.Song, _ string, _, _ bool, _ string, _ map[string]struct{}, taskID uint, playlistName string, onProgress core.DownloadProgressFunc) (*core.DownloadedSong, error) {
+	playlistDownloadDedupProvider = func() (core.DownloadDedupIndex, error) { return core.DownloadDedupIndex{}, nil }
+	playlistDownloadSongSaver = func(song *model.Song, _ string, _, _ bool, _ string, _ core.DownloadDedupIndex, taskID uint, playlistName string, onProgress core.DownloadProgressFunc) (*core.DownloadedSong, error) {
 		if taskID == 0 || playlistName != "Downloaded Mix" {
 			t.Fatalf("download context = task %d playlist %q", taskID, playlistName)
 		}

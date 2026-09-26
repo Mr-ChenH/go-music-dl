@@ -566,12 +566,12 @@ type modelState struct {
 	withLyrics bool
 
 	// 下载队列管理
-	downloadQueue []model.Song        // 待下载队列
-	totalToDl     int                 // 总共需要下载的数量
-	downloaded    int                 // 成功完成数量
-	skipped       int                 // 已存在跳过数量
-	failed        int                 // 失败数量
-	allSongsSet   map[string]struct{} // SQLite 去重集合，批量下载时复用
+	downloadQueue []model.Song            // 待下载队列
+	totalToDl     int                     // 总共需要下载的数量
+	downloaded    int                     // 成功完成数量
+	skipped       int                     // 已存在跳过数量
+	failed        int                     // 失败数量
+	allSongsSet   core.DownloadDedupIndex // SQLite 去重集合，批量下载时复用
 
 	// 换源队列管理
 	switchQueue []int
@@ -912,7 +912,7 @@ func (m modelState) updateList(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.failed = 0
 			m.allSongsSet, _ = core.LoadDownloadDedupSet()
 
-			skipCount := core.CountSkippable(m.downloadQueue, m.allSongsSet)
+			skipCount := core.CountSkippable(m.downloadQueue, m.allSongsSet, m.outDir)
 			m.state = stateConfirmDownload
 			if skipCount > 0 {
 				m.statusMsg = fmt.Sprintf("共 %d 首，其中 %d 首已在本地曲库（将跳过），Enter 确认下载 / Esc 取消", m.totalToDl, skipCount)
@@ -1364,7 +1364,7 @@ func fetchPlaylistSongsCmd(id, source string) tea.Cmd {
 	return fetchCollectionSongsCmd(id, source, searchTypePlaylist)
 }
 
-func downloadNextCmd(queue []model.Song, outDir string, withCover bool, withLyrics bool, allSongsSet map[string]struct{}) tea.Cmd {
+func downloadNextCmd(queue []model.Song, outDir string, withCover bool, withLyrics bool, allSongsSet core.DownloadDedupIndex) tea.Cmd {
 	return func() tea.Msg {
 		if len(queue) == 0 {
 			return nil
@@ -1428,7 +1428,7 @@ func (m *modelState) startPlayback(song model.Song) error {
 }
 
 // 内部下载实现（支持去重检查和记录）
-func downloadSongWithCookie(song *model.Song, outDir string, withCover bool, withLyrics bool, allSongsSet map[string]struct{}) error {
+func downloadSongWithCookie(song *model.Song, outDir string, withCover bool, withLyrics bool, allSongsSet core.DownloadDedupIndex) error {
 	_, err := core.DownloadWithDedupCheck(song, outDir, withCover, withLyrics, allSongsSet)
 	return err
 }

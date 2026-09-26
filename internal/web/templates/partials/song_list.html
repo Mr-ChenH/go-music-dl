@@ -1,4 +1,11 @@
 {{define "song_list"}}
+{{ if .ShowDetailBack }}
+<div class="detail-back-row">
+    <button type="button" class="ctrl-btn primary detail-back-button" onclick="navigateBack()" aria-label="返回上一页">
+        <i class="fa-solid fa-arrow-left"></i> 返回
+    </button>
+</div>
+{{ end }}
 {{ if or .Result .ColID (eq .SearchType "local_music") }}
 {{ $isLocalMusicPage := eq .SearchType "local_music" }}
     <div class="list-header">

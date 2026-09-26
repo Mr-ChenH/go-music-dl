@@ -118,6 +118,7 @@
                         <option value="data/downloads">PC 默认：data/downloads</option>
                         <option value="downloads">PC 简洁：downloads</option>
                         <option value="D:/Music/Downloads">PC 示例：D:/Music/Downloads</option>
+                        <option value="/home/appuser/data">Docker 默认：/home/appuser/data</option>
                         <option value="/sdcard/Music">Android 默认：/sdcard/Music</option>
                         <option value="/storage/emulated/0/Music">Android 兼容：/storage/emulated/0/Music</option>
                         <option value="/sdcard/Download">Android 下载：/sdcard/Download</option>
@@ -136,6 +137,18 @@
                 <label for="setting-download-filename-template">音乐文件名模板</label>
                 <input type="text" id="setting-download-filename-template" placeholder="{artist} - {name}">
                 <p class="setting-hint" style="margin-left: 0;">支持 <code>{name}</code>、<code>{artist}</code>、<code>{album}</code>、<code>{source}</code>、<code>{id}</code>、<code>{ext}</code>。未写 <code>{ext}</code> 时会自动追加扩展名；可用 <code>/</code> 或 <code>\</code> 创建相对子目录，例如 <code>{artist}/{album}/{name} - {artist}.{ext}</code>。</p>
+            </div>
+            <div class="cookie-item">
+                <label for="setting-download-tip-duration">下载提示显示时长</label>
+                <select id="setting-download-tip-duration" aria-label="下载提示显示时长">
+                    <option value="3">3 秒</option>
+                    <option value="5">5 秒</option>
+                    <option value="8" selected>8 秒（默认）</option>
+                    <option value="10">10 秒</option>
+                    <option value="15">15 秒</option>
+                    <option value="30">30 秒</option>
+                </select>
+                <p class="setting-hint" style="margin-left: 0;">下载完成、失败和批量下载提示会自动关闭，仍可随时手动关闭。</p>
             </div>
             <div class="cookie-item setting-item">
                 <label class="setting-toggle" for="setting-auto-cache-on-play">
@@ -190,16 +203,8 @@
             <section class="settings-section settings-application settings-page" data-settings-section="application">
                 <header class="settings-section-header">
                     <span class="settings-section-icon"><i class="fa-solid fa-window-restore"></i></span>
-                    <div><h4>应用功能</h4><p>版本信息、活动记录与视频工具入口</p></div>
+                    <div><h4>应用功能</h4><p>活动记录与视频工具入口</p></div>
                 </header>
-            <button type="button" class="cookie-item setting-item setting-link-row" onclick="openAboutAppModal()">
-                <span class="setting-link-icon"><i class="fa-solid fa-circle-info"></i></span>
-                <span class="setting-link-body">
-                    <span class="setting-link-title">关于 go-music-dl</span>
-                    <span class="setting-link-desc">查看当前版本并检查 GitHub 是否有新版</span>
-                </span>
-                <i class="fa-solid fa-chevron-right setting-link-chevron" aria-hidden="true"></i>
-            </button>
             <button type="button" class="cookie-item setting-item setting-link-row" onclick="openDownloadRecordsPage()">
                 <span class="setting-link-icon"><i class="fa-solid fa-clock-rotate-left"></i></span>
                 <span class="setting-link-body">
@@ -246,25 +251,6 @@
             <div class="settings-modal-footer">
                 <span id="settings-save-status" role="status"></span>
                 <button id="settings-save-button" class="btn-save" onclick="saveCookies()"><i class="fa-solid fa-floppy-disk"></i> 保存设置</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div id="appUpdateModal" class="modal-overlay" style="z-index: 1008;">
-    <div class="modal app-update-modal">
-        <div class="modal-header">
-            <div>
-                <h3 id="appUpdateTitle">检查更新</h3>
-                <p id="appUpdateSummary" class="app-update-summary">正在读取 GitHub 版本信息</p>
-            </div>
-            <div class="modal-close" onclick="closeUpdateModal()"><i class="fa-solid fa-xmark"></i></div>
-        </div>
-        <div class="modal-body">
-            <span id="updateCheckStatus" class="setting-inline-status"></span>
-            <div class="update-modal-actions">
-                <button type="button" class="btn-pill btn-pill-dl" onclick="closeUpdateModal()">关闭</button>
-                <button type="button" id="appUpdateOpenRepoBtn" class="btn-pill btn-pill-primary" onclick="openLatestUpdatePage('release')"><i class="fa-solid fa-arrow-up-right-from-square"></i> 打开发布页</button>
             </div>
         </div>
     </div>
@@ -366,9 +352,6 @@
             </div>
             <div id="download-records-list" class="utility-modal-list download-records-list"></div>
             <nav id="download-records-pagination" class="utility-modal-pagination" aria-label="下载记录分页"></nav>
-            <div class="utility-modal-footer download-records-footer">
-                <button type="button" class="btn-pill" onclick="closeDownloadRecordsModal()">关闭</button>
-            </div>
         </div>
     </div>
 </div>
@@ -394,9 +377,6 @@
             </div>
             <div id="playback-history-list" class="utility-modal-list playback-history-list"></div>
             <nav id="playback-history-pagination" class="utility-modal-pagination" aria-label="播放历史分页"></nav>
-            <div class="utility-modal-footer">
-                <button type="button" class="btn-pill" onclick="closePlaybackHistoryModal()">关闭</button>
-            </div>
         </div>
     </div>
 </div>

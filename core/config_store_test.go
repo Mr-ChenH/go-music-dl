@@ -119,6 +119,9 @@ func TestWebSettingsDefaultAndPersist(t *testing.T) {
 	if defaults.DownloadConcurrency != DefaultWebConcurrency {
 		t.Fatalf("default DownloadConcurrency mismatch: got %d want %d", defaults.DownloadConcurrency, DefaultWebConcurrency)
 	}
+	if defaults.DownloadTipDuration != DefaultDownloadTipDuration {
+		t.Fatalf("default DownloadTipDuration mismatch: got %d want %d", defaults.DownloadTipDuration, DefaultDownloadTipDuration)
+	}
 	if !defaults.AutoCheckUpdate {
 		t.Fatalf("default AutoCheckUpdate should be true")
 	}
@@ -164,6 +167,7 @@ func TestWebSettingsDefaultAndPersist(t *testing.T) {
 		WebPageSize:              100,
 		CliPageSize:              120,
 		DownloadConcurrency:      5,
+		DownloadTipDuration:      15,
 		AutoCheckUpdate:          false,
 		AutoSwitchInvalidSources: false,
 		AutoCacheOnPlay:          true,
@@ -193,6 +197,7 @@ func TestWebSettingsDefaultAndPersist(t *testing.T) {
 		WebPageSize:              100,
 		CliPageSize:              120,
 		DownloadConcurrency:      5,
+		DownloadTipDuration:      15,
 		AutoCheckUpdate:          false,
 		AutoSwitchInvalidSources: false,
 		AutoCacheOnPlay:          true,
@@ -233,6 +238,9 @@ func TestWebSettingsDefaultAndPersist(t *testing.T) {
 	}
 	if got.DownloadConcurrency != DefaultWebConcurrency {
 		t.Fatalf("custom save should fallback DownloadConcurrency to default: got %d want %d", got.DownloadConcurrency, DefaultWebConcurrency)
+	}
+	if got.DownloadTipDuration != DefaultDownloadTipDuration {
+		t.Fatalf("custom save should fallback DownloadTipDuration to default: got %d want %d", got.DownloadTipDuration, DefaultDownloadTipDuration)
 	}
 	if got.AutoCheckUpdate {
 		t.Fatalf("custom save should keep AutoCheckUpdate false when omitted: %#v", got)

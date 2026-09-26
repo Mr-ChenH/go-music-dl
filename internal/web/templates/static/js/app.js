@@ -13,11 +13,13 @@ const DOWNLOAD_DIR_PRESET_VALUES = [
   "data/downloads",
   "downloads",
   "D:/Music/Downloads",
+  "/home/appuser/data",
   "/sdcard/Music",
   "/storage/emulated/0/Music",
   "/sdcard/Download",
 ];
 const DOWNLOAD_DIR_PRESETS = new Set(DOWNLOAD_DIR_PRESET_VALUES);
+const DEFAULT_DOWNLOAD_TIP_DURATION = 8;
 const DEFAULT_UPDATE_REPO_URL = "https://github.com/guohuiyuan/go-music-dl";
 const DEFAULT_GITHUB_PROXY_URL = "https://edgeone.gh-proxy.com";
 const BATCH_DOWNLOAD_NOTICE_MS = 4200;
@@ -39,6 +41,7 @@ let webSettings = {
   downloadToLocal: true,
   downloadDir: "data/downloads",
   downloadFilenameTemplate: "{name} - {artist}",
+  downloadTipDuration: DEFAULT_DOWNLOAD_TIP_DURATION,
   webdavEnabled: false,
   webdavUrl: "",
   webdavUsername: "",
@@ -47,7 +50,6 @@ let webSettings = {
   disableFloatingLyrics: false,
   webPageSize: DEFAULT_WEB_PAGE_SIZE,
   cliPageSize: DEFAULT_CLI_PAGE_SIZE,
-  autoCheckUpdate: true,
   autoSwitchInvalidSources: true,
   autoCacheOnPlay: false,
   updateRepoUrl: DEFAULT_UPDATE_REPO_URL,
@@ -65,6 +67,7 @@ function normalizeWebSettings(raw) {
     downloadToLocal: true,
     downloadDir: "data/downloads",
     downloadFilenameTemplate: "{name} - {artist}",
+    downloadTipDuration: DEFAULT_DOWNLOAD_TIP_DURATION,
     webdavEnabled: false,
     webdavUrl: "",
     webdavUsername: "",
@@ -73,7 +76,6 @@ function normalizeWebSettings(raw) {
     disableFloatingLyrics: false,
     webPageSize: DEFAULT_WEB_PAGE_SIZE,
     cliPageSize: DEFAULT_CLI_PAGE_SIZE,
-    autoCheckUpdate: true,
     autoSwitchInvalidSources: true,
     autoCacheOnPlay: false,
     updateRepoUrl: DEFAULT_UPDATE_REPO_URL,
@@ -101,6 +103,12 @@ function normalizeWebSettings(raw) {
   ) {
     next.downloadFilenameTemplate = raw.downloadFilenameTemplate.trim();
   }
+  if (
+    Number.isInteger(raw.downloadTipDuration) &&
+    raw.downloadTipDuration > 0
+  ) {
+    next.downloadTipDuration = Math.min(raw.downloadTipDuration, 60);
+  }
   if (typeof raw.webdavEnabled === "boolean") {
     next.webdavEnabled = raw.webdavEnabled;
   }
@@ -127,9 +135,6 @@ function normalizeWebSettings(raw) {
   }
   if (Number.isInteger(raw.cliPageSize) && raw.cliPageSize > 0) {
     next.cliPageSize = Math.min(raw.cliPageSize, 200);
-  }
-  if (typeof raw.autoCheckUpdate === "boolean") {
-    next.autoCheckUpdate = raw.autoCheckUpdate;
   }
   if (typeof raw.autoSwitchInvalidSources === "boolean") {
     next.autoSwitchInvalidSources = raw.autoSwitchInvalidSources;
@@ -336,6 +341,13 @@ function applyWebSettings(settings) {
   );
   if (filenameTemplateInput) {
     filenameTemplateInput.value = webSettings.downloadFilenameTemplate;
+  }
+
+  const downloadTipDurationInput = document.getElementById(
+    "setting-download-tip-duration",
+  );
+  if (downloadTipDurationInput) {
+    downloadTipDurationInput.value = String(webSettings.downloadTipDuration);
   }
 
   const floatingLyricsToggle = document.getElementById(
@@ -776,6 +788,13 @@ function showToast(title, message = "", type = "info", duration = 0) {
   return close;
 }
 
+function downloadNoticeDuration() {
+  const seconds = Number(webSettings.downloadTipDuration);
+  return (Number.isFinite(seconds) && seconds > 0
+    ? Math.min(seconds, 60)
+    : DEFAULT_DOWNLOAD_TIP_DURATION) * 1000;
+}
+
 function inferExtFromContentType(contentType) {
   const raw = String(contentType || "")
     .toLowerCase()
@@ -872,10 +891,10 @@ async function handleDownloadClick(link) {
       message += `\nWebDAV: ${data.webdav_error}`;
       warning = true;
     }
-    showToast("下载完成", message, warning ? "warning" : "success", 0);
+    showToast("下载完成", message, warning ? "warning" : "success", downloadNoticeDuration());
     return true;
   } catch (error) {
-    showToast("下载失败", error.message || "下载失败", "error", 0);
+    showToast("下载失败", error.message || "下载失败", "error", downloadNoticeDuration());
   } finally {
     link.style.pointerEvents = "";
     link.style.opacity = "";
@@ -1565,6 +1584,14 @@ async function loadProgressiveSourceNavigation(targetURL, options, controller) {
   if (!rendered) showProgressiveNavigationFailure();
 }
 
+function navigateBack() {
+  if (window.history.length > 1) {
+    window.history.back();
+    return;
+  }
+  void navigateTo(API_ROOT + "/");
+}
+
 async function navigateTo(url, options = {}) {
   let targetURL;
   try {
@@ -1824,7 +1851,7 @@ document.addEventListener("DOMContentLoaded", function () {
   applyWebSettings(webSettings);
   bindAuthFloat();
   refreshAuthFloat();
-  fetchWebSettings().finally(() => maybeAutoCheckUpdate());
+  fetchWebSettings();
   bindPageNavigationEvents();
   initializePageContent(document);
   // 直接打开搜索结果链接，或 SPA 失败回退到整页加载时，同样把结果滚入视口。
@@ -4546,6 +4573,10 @@ async function saveCookies() {
     downloadFilenameTemplate:
       document.getElementById("setting-download-filename-template")?.value ||
       "",
+    downloadTipDuration: parsePositiveInt(
+      document.getElementById("setting-download-tip-duration")?.value,
+      DEFAULT_DOWNLOAD_TIP_DURATION,
+    ),
     webdavEnabled: !!document.getElementById("setting-webdav-enabled")
       ?.checked,
     webdavUrl: document.getElementById("setting-webdav-url")?.value || "",
@@ -4564,7 +4595,6 @@ async function saveCookies() {
       cliPageSizeInput?.value,
       DEFAULT_CLI_PAGE_SIZE,
     ),
-    autoCheckUpdate: webSettings.autoCheckUpdate,
     autoSwitchInvalidSources: !!document.getElementById(
       "setting-auto-switch-invalid-sources",
     )?.checked,
@@ -5863,6 +5893,8 @@ function setPlayButtonState(card, isPlaying) {
   icon.classList.remove("fa-play", "fa-stop");
   icon.classList.add(isPlaying ? "fa-stop" : "fa-play");
   btn.title = isPlaying ? "停止" : "播放";
+  btn.setAttribute("aria-label", isPlaying ? "停止" : "播放");
+  btn.classList.toggle("is-stop", isPlaying);
 }
 
 function syncAllPlayButtons() {
@@ -6778,7 +6810,7 @@ async function batchCopyDownloadUrls() {
       "下载地址已复制",
       `${scope}歌曲的下载链接已写入剪贴板，可直接粘贴到 aria2。`,
       "success",
-      BATCH_DOWNLOAD_NOTICE_MS,
+      downloadNoticeDuration(),
     );
   } catch (err) {
     showToast(
@@ -6821,7 +6853,7 @@ async function batchDownload() {
     "批量下载已开始",
     `正在保存 ${songs.length} 首歌曲${ignoredLocalText}，进度与结果请查看右侧“下载记录”。`,
     "info",
-    BATCH_DOWNLOAD_NOTICE_MS,
+    downloadNoticeDuration(),
   );
 
   let success = 0;
@@ -6859,7 +6891,7 @@ async function batchDownload() {
       failed > 0 ? "批量下载部分完成" : "批量下载完成",
       `${summary.join("，")}。详情请查看右侧“下载记录”。`,
       failed > 0 ? "warning" : "success",
-      BATCH_DOWNLOAD_NOTICE_MS,
+      downloadNoticeDuration(),
     );
 
     setDownloadRecordsButtonState("updated");

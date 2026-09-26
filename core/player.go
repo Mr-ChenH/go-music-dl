@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/guohuiyuan/music-lib/migu"
 	"github.com/guohuiyuan/music-lib/model"
 )
 
@@ -90,6 +91,34 @@ func PreparePlaybackSource(song *model.Song) (playURL string, tempFile string, e
 	}
 	if strings.TrimSpace(song.ID) == "" || strings.TrimSpace(song.Source) == "" {
 		return "", "", errors.New("missing song id or source")
+	}
+
+	if song.Source == "migu" {
+		info, infoErr := migu.New(CM.Get("migu")).GetDownloadInfo(song)
+		if infoErr != nil {
+			return "", "", infoErr
+		}
+		if !info.Encrypted {
+			return info.URL, "", nil
+		}
+
+		data, decErr := fetchMiguAudio(info)
+		if decErr != nil {
+			return "", "", decErr
+		}
+		ext := DetectAudioExt(data)
+		f, createErr := os.CreateTemp("", "gomusicdl-play-*."+ext)
+		if createErr != nil {
+			return "", "", createErr
+		}
+		path := f.Name()
+		if _, writeErr := f.Write(data); writeErr != nil {
+			f.Close()
+			os.Remove(path)
+			return "", "", writeErr
+		}
+		f.Close()
+		return path, path, nil
 	}
 
 	if song.Source == "soda" {

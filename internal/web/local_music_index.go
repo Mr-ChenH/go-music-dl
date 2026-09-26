@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/guohuiyuan/go-music-dl/core"
 	"github.com/guohuiyuan/music-lib/model"
 	"gorm.io/gorm/clause"
 )
@@ -102,6 +103,11 @@ func syncLocalMusicIndex() error {
 	if err := syncTracksToIndex(tracks); err != nil {
 		return err
 	}
+	// 磁盘是唯一真相：扫完盘顺手对账下载去重索引，把文件已经不在本地的记录回收掉，
+	// 否则用户在 NAS 后台删掉文件后再下载，仍然会被判定为「已下载」而跳过。
+	if exists {
+		reconcileDownloadDedupWithScan(tracks, dir)
+	}
 	storeLocalMusicScanSnapshot(localMusicScanSnapshot{
 		Dir:       dir,
 		Tracks:    cloneLocalMusicTrackSlice(tracks),
@@ -116,6 +122,74 @@ func syncLocalMusicIndexAsync() {
 	go func() {
 		_ = syncLocalMusicIndex()
 	}()
+}
+
+// reconcileDownloadDedupWithScan 用一次全量扫盘结果对账下载去重索引。keep 之外的
+// 歌说明磁盘上已经没有文件，对应记录会被回收；路径有变化的会被更新。
+//
+// 只在扫描到至少一个音频文件时才动去重索引：下载目录被整个清空（或挂载点掉了）
+// 时宁可保守，避免一次性清光下载去重记录。
+func reconcileDownloadDedupWithScan(tracks []*localMusicTrack, outDir string) {
+	if len(tracks) == 0 {
+		return
+	}
+	keep := make(map[string]string, len(tracks))
+	for _, track := range tracks {
+		if track == nil {
+			continue
+		}
+		keep[core.SongKey(&model.Song{Name: track.Name, Artist: track.Artist})] = track.RelPath
+	}
+	_, _ = core.PruneDownloadDedup(outDir, keep)
+}
+
+// resolveLegacyDedupForSong 处理没有记录文件路径的旧去重记录：拿歌名+歌手去本地曲库
+// 索引反查，确认真实文件还在不在。查不到就回收记录（这次下载不再被跳过），查到就
+// 把路径补回去，后续判定可以直接走文件校验。
+func resolveLegacyDedupForSong(index core.DownloadDedupIndex, song *model.Song) {
+	if index == nil || song == nil {
+		return
+	}
+	key := core.SongKey(song)
+	relPath, exists := index[key]
+	if !exists || strings.TrimSpace(relPath) != "" {
+		return
+	}
+
+	if row, _, err := findLocalMusicMatch(song.Name, song.Artist); err != nil {
+		return
+	} else if row != nil &&
+		strings.EqualFold(strings.TrimSpace(row.Name), strings.TrimSpace(song.Name)) &&
+		strings.EqualFold(strings.TrimSpace(row.Artist), strings.TrimSpace(song.Artist)) {
+		index[key] = row.RelPath
+		_ = core.SaveDownloadDedupEntry(song.Name, song.Artist, row.RelPath)
+		return
+	}
+
+	tracks, _, dirExists, err, _, _ := scanLocalMusicTracksCached(true)
+	if err != nil || !dirExists {
+		return
+	}
+
+	var match *localMusicTrack
+	for _, track := range tracks {
+		if track == nil {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(track.Name), strings.TrimSpace(song.Name)) &&
+			strings.EqualFold(strings.TrimSpace(track.Artist), strings.TrimSpace(song.Artist)) {
+			match = track
+			break
+		}
+	}
+	if match == nil {
+		_ = core.ForgetDownloadedSong(song.Name, song.Artist, "")
+		delete(index, key)
+		return
+	}
+
+	index[key] = match.RelPath
+	_ = core.SaveDownloadDedupEntry(song.Name, song.Artist, match.RelPath)
 }
 
 // loadTracksFromIndex 从 SQLite 索引表分页读取本地音乐，不走文件系统 IO。

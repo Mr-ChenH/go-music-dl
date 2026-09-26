@@ -33,7 +33,7 @@ func TestBatchDownloadUsesCompactRecordBackedFeedback(t *testing.T) {
 
 	for _, want := range []string{
 		"确认批量下载",
-		"BATCH_DOWNLOAD_NOTICE_MS",
+		"downloadNoticeDuration()",
 		"批量下载已开始",
 		"右侧“下载记录”",
 		`setDownloadRecordsButtonState("downloading")`,

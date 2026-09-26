@@ -21,6 +21,7 @@ const (
 	DefaultWebPageSize              = 200
 	DefaultCLIPageSize              = 20
 	DefaultWebConcurrency           = 3
+	DefaultDownloadTipDuration      = 8
 	DefaultUpdateRepoURL            = "https://github.com/guohuiyuan/go-music-dl"
 	DefaultGithubProxyURL           = "https://edgeone.gh-proxy.com"
 	webSettingsKey                  = "web_settings"
@@ -44,6 +45,7 @@ type WebSettings struct {
 	DownloadToLocal          bool   `json:"downloadToLocal"`
 	DownloadDir              string `json:"downloadDir"`
 	DownloadFilenameTemplate string `json:"downloadFilenameTemplate"`
+	DownloadTipDuration      int    `json:"downloadTipDuration"`
 	WebDAVEnabled            bool   `json:"webdavEnabled"`
 	WebDAVURL                string `json:"webdavUrl"`
 	WebDAVUsername           string `json:"webdavUsername"`
@@ -87,6 +89,23 @@ func configDBPath() string {
 // ConfigDBPath returns the canonical SQLite file used by the app.
 func ConfigDBPath() string {
 	return configDBPath()
+}
+
+// CloseConfigDB closes the shared settings database connection. Tests and
+// graceful shutdown use this to release the SQLite file handle.
+func CloseConfigDB() error {
+	if configDB == nil {
+		return nil
+	}
+	sqlDB, err := configDB.DB()
+	if err != nil {
+		return err
+	}
+	closeErr := sqlDB.Close()
+	configDB = nil
+	configInitErr = nil
+	configInit = sync.Once{}
+	return closeErr
 }
 
 func legacyCookieFilePath() string {
@@ -174,6 +193,7 @@ func defaultWebSettings() WebSettings {
 		WebPageSize:              DefaultWebPageSize,
 		CliPageSize:              DefaultCLIPageSize,
 		DownloadConcurrency:      DefaultWebConcurrency,
+		DownloadTipDuration:      DefaultDownloadTipDuration,
 		AutoCheckUpdate:          true,
 		AutoSwitchInvalidSources: true,
 		AutoCacheOnPlay:          false,
@@ -218,6 +238,12 @@ func normalizeWebSettings(settings WebSettings) WebSettings {
 	}
 	if settings.DownloadConcurrency < 1 {
 		settings.DownloadConcurrency = 1
+	}
+	if settings.DownloadTipDuration <= 0 {
+		settings.DownloadTipDuration = DefaultDownloadTipDuration
+	}
+	if settings.DownloadTipDuration > 60 {
+		settings.DownloadTipDuration = 60
 	}
 	settings.UpdateRepoURL = strings.TrimSpace(settings.UpdateRepoURL)
 	if settings.UpdateRepoURL == "" {

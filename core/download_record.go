@@ -1,6 +1,8 @@
 package core
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -30,12 +32,19 @@ type DownloadRecord struct {
 
 // DownloadDedupEntry is intentionally separate from the visible history. Clearing
 // the history therefore does not make previously downloaded songs downloadable again.
+// RelPath 记录这首歌落在下载目录内的相对路径：文件被删除后要靠它回收这条记录，
+// 否则再下载会被判定为「已下载」而跳过。
 type DownloadDedupEntry struct {
 	SongKey   string    `gorm:"primaryKey;size:1024"`
 	Name      string    `gorm:"size:512;not null"`
 	Artist    string    `gorm:"size:512;not null"`
+	RelPath   string    `gorm:"size:1024"`
 	CreatedAt time.Time `gorm:"autoCreateTime"`
 }
+
+// DownloadDedupIndex 是去重索引的内存视图：key 为 SongKey，value 为记录到的
+// 下载目录内相对路径（空字符串表示旧数据，路径未知）。
+type DownloadDedupIndex map[string]string
 
 func initDownloadRecordTable() error {
 	if err := ensureConfigDB(); err != nil {
@@ -47,16 +56,26 @@ func initDownloadRecordTable() error {
 // SaveDownloadRecord persists one download outcome and records successful songs in
 // the durable de-duplication index. Control characters are removed before writing.
 func SaveDownloadRecord(name, artist, source, status, errStr string) error {
-	return SaveDownloadRecordForTask(0, "", name, artist, source, status, errStr)
+	return SaveDownloadRecordForTaskWithRelPath(0, "", name, artist, source, status, errStr, "")
+}
+
+// SaveDownloadRecordWithRelPath records a download and its path relative to the download directory.
+func SaveDownloadRecordWithRelPath(name, artist, source, status, errStr, relPath string) error {
+	return SaveDownloadRecordForTaskWithRelPath(0, "", name, artist, source, status, errStr, relPath)
 }
 
 func SaveDownloadRecordForTask(taskID uint, playlistName, name, artist, source, status, errStr string) error {
+	return SaveDownloadRecordForTaskWithRelPath(taskID, playlistName, name, artist, source, status, errStr, "")
+}
+
+func SaveDownloadRecordForTaskWithRelPath(taskID uint, playlistName, name, artist, source, status, errStr, relPath string) error {
 	if err := initDownloadRecordTable(); err != nil {
 		return err
 	}
 
 	name = cleanDownloadRecordText(name)
 	artist = cleanDownloadRecordText(artist)
+	relPath = cleanDownloadRelPath(relPath)
 	record := DownloadRecord{
 		TaskID:       taskID,
 		PlaylistName: cleanDownloadRecordText(playlistName),
@@ -75,32 +94,52 @@ func SaveDownloadRecordForTask(taskID uint, playlistName, name, artist, source, 
 			return nil
 		}
 
-		return saveDownloadDedupEntry(tx, record.Name, record.Artist)
+		return saveDownloadDedupEntry(tx, record.Name, record.Artist, relPath)
 	})
 }
 
 // SaveDownloadDedupEntry records a song as already available locally without
 // adding an item to the user-visible download history.
-func SaveDownloadDedupEntry(name, artist string) error {
+func SaveDownloadDedupEntry(name, artist, relPath string) error {
 	if err := initDownloadRecordTable(); err != nil {
 		return err
 	}
-	return saveDownloadDedupEntry(configDB, name, artist)
+	return saveDownloadDedupEntry(configDB, name, artist, relPath)
 }
 
-func saveDownloadDedupEntry(db *gorm.DB, name, artist string) error {
+func saveDownloadDedupEntry(db *gorm.DB, name, artist, relPath string) error {
 	name = cleanDownloadRecordText(name)
 	artist = cleanDownloadRecordText(artist)
+	relPath = cleanDownloadRelPath(relPath)
 	entry := DownloadDedupEntry{
 		SongKey: songKeyFromParts(name, artist),
 		Name:    name,
 		Artist:  artist,
+		RelPath: relPath,
 	}
-	return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&entry).Error
+	// 路径未知时不能覆盖已有路径，只有拿到了真实路径才回填。
+	if relPath == "" {
+		return db.Clauses(clause.OnConflict{DoNothing: true}).Create(&entry).Error
+	}
+	return db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "song_key"}},
+		DoUpdates: clause.AssignmentColumns([]string{"rel_path"}),
+	}).Create(&entry).Error
 }
 
 func cleanDownloadRecordText(value string) string {
 	return strings.TrimSpace(stripControl(value))
+}
+
+// cleanDownloadRelPath 归一化下载目录内的相对路径：去掉控制字符、统一成斜杠、
+// 去掉开头斜杠，保证跨平台存进 SQLite 的形态一致。
+func cleanDownloadRelPath(relPath string) string {
+	relPath = strings.ReplaceAll(strings.TrimSpace(stripControl(relPath)), "\\", "/")
+	relPath = strings.TrimSpace(relPath)
+	for strings.HasPrefix(relPath, "/") {
+		relPath = strings.TrimPrefix(relPath, "/")
+	}
+	return relPath
 }
 
 // GetDownloadRecords returns the most recent 200 user-visible download records.
@@ -187,17 +226,124 @@ func stripControl(value string) string {
 	return builder.String()
 }
 
-func IsSongDownloaded(song *model.Song, dedupSet map[string]struct{}) bool {
-	if dedupSet == nil {
+// DownloadDirOrDefault 返回实际使用的下载目录（空值回落到默认目录）。
+func DownloadDirOrDefault(outDir string) string {
+	dir := strings.TrimSpace(outDir)
+	if dir == "" {
+		dir = DefaultWebDownloadDir
+	}
+	return filepath.Clean(dir)
+}
+
+// inspectDownloadFile 返回文件是否存在以及判断是否明确。权限错误、临时 I/O
+// 故障或挂载异常返回 known=false，调用方必须保守处理，不能当作文件已删除。
+func inspectDownloadFile(outDir, relPath string) (exists bool, known bool) {
+	relPath = cleanDownloadRelPath(relPath)
+	if relPath == "" {
+		return false, false
+	}
+	info, err := os.Stat(filepath.Join(DownloadDirOrDefault(outDir), filepath.FromSlash(relPath)))
+	if err == nil {
+		return !info.IsDir(), true
+	}
+	if os.IsNotExist(err) {
+		return false, true
+	}
+	return false, false
+}
+
+// DownloadFileExists 判断下载目录内的相对路径是否仍然指向一个真实文件。
+func DownloadFileExists(outDir, relPath string) bool {
+	exists, _ := inspectDownloadFile(outDir, relPath)
+	return exists
+}
+
+// SongFileRelPath 返回去重索引里记录的文件相对路径（"" 表示没有记录或路径未知）。
+func SongFileRelPath(song *model.Song, index DownloadDedupIndex) string {
+	if index == nil {
+		return ""
+	}
+	return index[SongKey(song)]
+}
+
+// IsSongDownloaded 只查去重索引，不校验磁盘。需要判断「现在还能不能跳过」时用
+// IsSongStillDownloaded。
+func IsSongDownloaded(song *model.Song, index DownloadDedupIndex) bool {
+	if index == nil {
 		return false
 	}
-	_, exists := dedupSet[SongKey(song)]
+	_, exists := index[SongKey(song)]
 	return exists
+}
+
+// IsSongStillDownloaded 在去重索引命中的基础上校验文件是否还在下载目录里。
+// 记录里没有路径（旧数据）时按「仍在」处理，由上层用本地曲库索引反查。
+// 一旦确认文件已被删除，会顺手回收这条去重记录，避免以后一直被判定为已下载。
+func IsSongStillDownloaded(song *model.Song, index DownloadDedupIndex, outDir string) bool {
+	if index == nil {
+		return false
+	}
+	key := SongKey(song)
+	relPath, exists := index[key]
+	if !exists {
+		return false
+	}
+	if cleanDownloadRelPath(relPath) == "" {
+		return true
+	}
+	exists, known := inspectDownloadFile(outDir, relPath)
+	if !known || exists {
+		return true
+	}
+	_ = forgetDownloadedSongKeys(key)
+	delete(index, key)
+	return false
+}
+
+// ForgetDownloadedSong 清理去重索引中与这首歌相关的记录（按歌名+歌手，或按文件
+// 相对路径）。删除本地文件后调用，这样再下载时不会因为记录残留而被跳过。
+func ForgetDownloadedSong(name, artist, relPath string) error {
+	if err := initDownloadRecordTable(); err != nil {
+		return err
+	}
+	keys := []string{songKeyFromParts(name, artist)}
+	return forgetDownloadedSongWhere(keys, cleanDownloadRelPath(relPath))
+}
+
+func forgetDownloadedSongKeys(keys ...string) error {
+	if err := initDownloadRecordTable(); err != nil {
+		return err
+	}
+	return forgetDownloadedSongWhere(keys, "")
+}
+
+func forgetDownloadedSongWhere(keys []string, relPath string) error {
+	conditions := make([]string, 0, 2)
+	args := make([]interface{}, 0, 2)
+
+	cleanKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if strings.TrimSpace(key) != "" {
+			cleanKeys = append(cleanKeys, key)
+		}
+	}
+	if len(cleanKeys) > 0 {
+		conditions = append(conditions, "song_key IN ?")
+		args = append(args, cleanKeys)
+	}
+	if relPath != "" {
+		conditions = append(conditions, "rel_path = ?")
+		args = append(args, relPath)
+	}
+	if len(conditions) == 0 {
+		return nil
+	}
+	return configDB.Where(strings.Join(conditions, " OR "), args...).Delete(&DownloadDedupEntry{}).Error
 }
 
 // LoadDownloadDedupSet loads the SQLite de-duplication index. On first use after
 // upgrading, it migrates existing successful history rows into the new index.
-func LoadDownloadDedupSet() (map[string]struct{}, error) {
+func LoadDownloadDedupSet() (DownloadDedupIndex, error) {
 	if err := initDownloadRecordTable(); err != nil {
 		return nil, err
 	}
@@ -226,40 +372,83 @@ func LoadDownloadDedupSet() (map[string]struct{}, error) {
 		}
 	}
 
-	set := make(map[string]struct{}, len(entries))
+	index := make(DownloadDedupIndex, len(entries))
 	for _, entry := range entries {
 		if key := cleanDownloadRecordText(entry.SongKey); key != "" {
-			set[key] = struct{}{}
+			index[key] = cleanDownloadRelPath(entry.RelPath)
 		}
 	}
-	return set, nil
+	return index, nil
 }
 
-func CountSkippable(queue []model.Song, dedupSet map[string]struct{}) int {
+// PruneDownloadDedup 用一次全量扫盘结果对账去重索引：keep 里没有的记录说明文件
+// 已经不在下载目录里，整条回收；keep 里有记录的顺手把文件路径回填/更新。
+// 返回被回收的记录条数。
+//
+// 调用方必须先确认下载目录真实存在，否则目录未挂载时会把整张索引清空。
+func PruneDownloadDedup(outDir string, keep map[string]string) (int, error) {
+	if err := initDownloadRecordTable(); err != nil {
+		return 0, err
+	}
+
+	var entries []DownloadDedupEntry
+	if err := configDB.Find(&entries).Error; err != nil {
+		return 0, err
+	}
+
+	removed := 0
+	for _, entry := range entries {
+		relPath, exists := keep[entry.SongKey]
+		if !exists {
+			// 扫描和下载可能并发：新记录未必在这轮扫描快照里。删除前再看
+			// 一次磁盘，只要文件明确存在，或状态无法判断，就保留记录。
+			fileExists, fileKnown := inspectDownloadFile(outDir, entry.RelPath)
+			if fileExists || !fileKnown {
+				continue
+			}
+			if err := configDB.Where("song_key = ?", entry.SongKey).Delete(&DownloadDedupEntry{}).Error; err != nil {
+				return removed, err
+			}
+			removed++
+			continue
+		}
+		if relPath != "" && cleanDownloadRelPath(entry.RelPath) != cleanDownloadRelPath(relPath) {
+			// 文件被改名或换目录后，把路径同步过来，下次校验才不会误判。
+			if err := configDB.Model(&DownloadDedupEntry{}).
+				Where("song_key = ?", entry.SongKey).
+				Update("rel_path", cleanDownloadRelPath(relPath)).Error; err != nil {
+				return removed, err
+			}
+		}
+	}
+	return removed, nil
+}
+
+func CountSkippable(queue []model.Song, index DownloadDedupIndex, outDir string) int {
 	count := 0
-	for _, song := range queue {
-		if IsSongDownloaded(&song, dedupSet) {
+	for i := range queue {
+		if IsSongStillDownloaded(&queue[i], index, outDir) {
 			count++
 		}
 	}
 	return count
 }
 
-func DownloadWithDedupCheck(song *model.Song, outDir string, withCover, withLyrics bool, dedupSet map[string]struct{}) (*DownloadedSong, error) {
+func DownloadWithDedupCheck(song *model.Song, outDir string, withCover, withLyrics bool, dedupSet DownloadDedupIndex) (*DownloadedSong, error) {
 	return DownloadWithDedupCheckWithTemplate(song, outDir, withCover, withLyrics, "", dedupSet)
 }
 
-func DownloadWithDedupCheckWithTemplate(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet map[string]struct{}) (*DownloadedSong, error) {
+func DownloadWithDedupCheckWithTemplate(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet DownloadDedupIndex) (*DownloadedSong, error) {
 	return DownloadWithDedupCheckForTask(song, outDir, withCover, withLyrics, filenameTemplate, dedupSet, 0, "")
 }
 
-func DownloadWithDedupCheckForTask(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet map[string]struct{}, taskID uint, playlistName string) (*DownloadedSong, error) {
+func DownloadWithDedupCheckForTask(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet DownloadDedupIndex, taskID uint, playlistName string) (*DownloadedSong, error) {
 	return DownloadWithDedupCheckForTaskProgress(song, outDir, withCover, withLyrics, filenameTemplate, dedupSet, taskID, playlistName, nil)
 }
 
-func DownloadWithDedupCheckForTaskProgress(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet map[string]struct{}, taskID uint, playlistName string, onProgress DownloadProgressFunc) (*DownloadedSong, error) {
+func DownloadWithDedupCheckForTaskProgress(song *model.Song, outDir string, withCover, withLyrics bool, filenameTemplate string, dedupSet DownloadDedupIndex, taskID uint, playlistName string, onProgress DownloadProgressFunc) (*DownloadedSong, error) {
 	key := SongKey(song)
-	if IsSongDownloaded(song, dedupSet) {
+	if IsSongStillDownloaded(song, dedupSet, outDir) {
 		_ = SaveDownloadRecordForTask(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusSkipped, "")
 		return &DownloadedSong{Skipped: true, Filename: key}, nil
 	}
@@ -274,9 +463,27 @@ func DownloadWithDedupCheckForTaskProgress(song *model.Song, outDir string, with
 		return result, dlErr
 	}
 
-	_ = SaveDownloadRecordForTask(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusSuccess, "")
+	// Persist the relative path so future dedup checks can verify the file still exists.
+	relPath := ""
+	if result != nil {
+		relPath = relativeDownloadPath(outDir, result.SavedPath)
+	}
+	_ = SaveDownloadRecordForTaskWithRelPath(taskID, playlistName, song.Name, song.Artist, song.Source, DownloadStatusSuccess, "", relPath)
 	if dedupSet != nil {
-		dedupSet[key] = struct{}{}
+		dedupSet[key] = relPath
 	}
 	return result, nil
+}
+
+// relativeDownloadPath 把落盘后的绝对路径换算成下载目录内的相对路径。
+func relativeDownloadPath(outDir, savedPath string) string {
+	savedPath = strings.TrimSpace(savedPath)
+	if savedPath == "" {
+		return ""
+	}
+	rel, err := filepath.Rel(DownloadDirOrDefault(outDir), savedPath)
+	if err != nil {
+		return ""
+	}
+	return cleanDownloadRelPath(rel)
 }

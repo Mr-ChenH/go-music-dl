@@ -214,6 +214,13 @@ const (
 	defaultLocalMusicPageSize = 30
 )
 
+func isDetailPagePath(requestPath string) bool {
+	requestPath = strings.TrimRight(strings.TrimSpace(requestPath), "/")
+	return strings.HasSuffix(requestPath, "/playlist") ||
+		strings.HasSuffix(requestPath, "/album") ||
+		strings.HasSuffix(requestPath, "/collection")
+}
+
 func renderIndex(c *gin.Context, songs []model.Song, playlists []model.Playlist, q string, selected []string, errMsg string, searchType string, playlistLink string, colID string, colName string, isLocalColPage bool, collectionKind string, importCollection *importCollectionMeta) {
 	allSrc := core.GetAllSourceNames()
 	desc := make(map[string]string)
@@ -332,6 +339,7 @@ func renderIndex(c *gin.Context, songs []model.Song, playlists []model.Playlist,
 		"Selected":                selected,
 		"Error":                   errMsg,
 		"SearchType":              searchType,
+		"ShowDetailBack":          isDetailPagePath(c.Request.URL.Path),
 		"PlaylistSupported":       playlistSupported,
 		"AlbumSupported":          albumSupported,
 		"CategorySupported":       playlistCategorySupported,

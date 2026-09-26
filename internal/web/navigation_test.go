@@ -70,6 +70,9 @@ func TestRenderIndexPlaylistCardsUseAjaxNavigation(t *testing.T) {
 	if !strings.Contains(body, `onclick="navigateTo('`) {
 		t.Fatalf("rendered html missing navigateTo playlist navigation: %s", body)
 	}
+	if strings.Contains(body, `class="detail-back-row"`) {
+		t.Fatalf("playlist search results should not render the detail back button: %s", body)
+	}
 }
 
 func TestRemotePlaylistDetailKeepsReactNavigationMount(t *testing.T) {
@@ -94,6 +97,30 @@ func TestRemotePlaylistDetailKeepsReactNavigationMount(t *testing.T) {
 	}
 	if !strings.Contains(body, `data-current-path="/music/playlist"`) {
 		t.Fatalf("remote playlist detail should expose its path to React navigation: %s", body)
+	}
+	if !strings.Contains(body, `class="detail-back-row"`) ||
+		!strings.Contains(body, `onclick="navigateBack()"`) {
+		t.Fatalf("remote playlist detail should render a back button: %s", body)
+	}
+}
+
+func TestDetailPagePathDetection(t *testing.T) {
+	for _, requestPath := range []string{
+		"/playlist",
+		"/music/playlist/",
+		"/album",
+		"/music/album/",
+		"/collection",
+		"/music/collection/",
+	} {
+		if !isDetailPagePath(requestPath) {
+			t.Fatalf("isDetailPagePath(%q) = false, want true", requestPath)
+		}
+	}
+	for _, requestPath := range []string{"/", "/search", "/playlist_categories", "/my_collections", "/local_music_page"} {
+		if isDetailPagePath(requestPath) {
+			t.Fatalf("isDetailPagePath(%q) = true, want false", requestPath)
+		}
 	}
 }
 
@@ -171,6 +198,9 @@ func TestAppJSIncludesAjaxNavigationEntryPoints(t *testing.T) {
 	if !strings.Contains(js, "async function navigateTo(url, options = {})") {
 		t.Fatal("app.js missing navigateTo function")
 	}
+	if !strings.Contains(js, "function navigateBack()") {
+		t.Fatal("app.js missing navigateBack function")
+	}
 	if !strings.Contains(js, "function bindPageNavigationEvents()") {
 		t.Fatal("app.js missing bindPageNavigationEvents function")
 	}
@@ -195,17 +225,13 @@ func TestAppJSIncludesAjaxNavigationEntryPoints(t *testing.T) {
 	if !strings.Contains(js, "refreshDownloadLinks(root);") {
 		t.Fatal("app.js missing download link refresh during page initialization")
 	}
-	if !strings.Contains(js, "function maybeAutoCheckUpdate()") {
-		t.Fatal("app.js missing auto update check")
-	}
-	if !strings.Contains(js, "function checkAppUpdate(options = {})") {
-		t.Fatal("app.js missing GitHub update check")
-	}
-	if !strings.Contains(js, "async function openAboutAppModal()") {
-		t.Fatal("app.js missing openAboutAppModal entry point")
-	}
-	if !strings.Contains(js, `async function openLatestUpdatePage(target = "download")`) {
-		t.Fatal("app.js missing openLatestUpdatePage helper")
+	for _, removed := range []string{
+		"fetchWebSettings().finally(() => maybeAutoCheckUpdate())",
+		`onclick="openAboutAppModal()"`,
+	} {
+		if strings.Contains(js, removed) {
+			t.Fatalf("app.js should not expose version notification token %q", removed)
+		}
 	}
 	if !strings.Contains(js, "function openClientExternalURL(url, popup = null)") {
 		t.Fatal("app.js missing client-side external opener")
@@ -575,11 +601,10 @@ func TestSettingsModalIncludesDownloadDirPresets(t *testing.T) {
 	for _, want := range []string{
 		`id="setting-download-dir-preset"`,
 		`id="setting-download-filename-template"`,
+		`id="setting-download-tip-duration"`,
 		`id="setting-auto-cache-on-play"`,
 		`id="setting-floating-lyrics"`,
 		`id="setting-auto-switch-invalid-sources"`,
-		`onclick="openAboutAppModal()"`,
-		`关于 go-music-dl`,
 		`class="cookie-item setting-item setting-link-row"`,
 		`setting-link-icon`,
 		`setting-link-title`,
@@ -589,6 +614,7 @@ func TestSettingsModalIncludesDownloadDirPresets(t *testing.T) {
 		`{ext}`,
 		`PC 默认：data/downloads`,
 		`PC 示例：D:/Music/Downloads`,
+		`Docker 默认：/home/appuser/data`,
 		`Android 默认：/sdcard/Music`,
 		`Android 兼容：/storage/emulated/0/Music`,
 		`自定义目录...`,
@@ -599,6 +625,9 @@ func TestSettingsModalIncludesDownloadDirPresets(t *testing.T) {
 	}
 	for _, unwanted := range []string{
 		`id="setting-update-repo-url"`,
+		`onclick="openAboutAppModal()"`,
+		`关于 go-music-dl`,
+		`id="appUpdateModal"`,
 		`id="setting-github-proxy-enabled"`,
 		`id="setting-github-proxy-disabled"`,
 		`name="setting-github-proxy-url"`,
@@ -651,50 +680,22 @@ func TestDefaultPageSizePrompts(t *testing.T) {
 	}
 }
 
-func TestAppUpdateModalIsAboutOnly(t *testing.T) {
-	content, err := templateFS.ReadFile("templates/partials/modals.html")
+func TestAppUpdateNotificationIsRemoved(t *testing.T) {
+	modalContent, err := templateFS.ReadFile("templates/partials/modals.html")
 	if err != nil {
 		t.Fatalf("ReadFile(modals.html): %v", err)
 	}
-	html := string(content)
-	for _, want := range []string{
-		`id="appUpdateModal"`,
-		`id="appUpdateTitle"`,
-		`id="appUpdateSummary"`,
-		`id="updateCheckStatus"`,
-		`onclick="closeUpdateModal()"`,
-		`onclick="openLatestUpdatePage('release')"`,
-	} {
-		if !strings.Contains(html, want) {
-			t.Fatalf("app update modal missing %q", want)
-		}
+	appContent, err := templateFS.ReadFile("templates/static/js/app.js")
+	if err != nil {
+		t.Fatalf("ReadFile(app.js): %v", err)
 	}
 	for _, unwanted := range []string{
-		`id="updateRepoUrlInput"`,
-		`id="updateGithubProxyEnabled"`,
-		`id="updateGithubProxyDisabled"`,
-		`id="updateGithubProxyCustom"`,
-		`id="updateGithubProxyCustomRadio"`,
-		`name="update-github-proxy-url"`,
-		`name="update-github-proxy-mode"`,
-		`name="update-install-mode"`,
-		`id="updatePackageFile"`,
-		`id="appUpdateNotes"`,
-		`id="updateProxyTestStatus"`,
-		`onclick="testUpdateGithubProxy()"`,
-		`onclick="refreshUpdateModalCheck()"`,
-		`onclick="openLatestUpdatePage('download')"`,
-		`onchange="applyUpdateProxyVisibility()"`,
-		`installUpdateFromModal`,
-		`appUpdateInstallBtn`,
-		`重新检查`,
-		`前往 GitHub 下载`,
-		`从文件安装`,
-		`https://edgeone.gh-proxy.com`,
-		`https://gh.llkk.cc`,
+		`id="appUpdateModal"`,
+		`onclick="openAboutAppModal()"`,
+		`fetchWebSettings().finally(() => maybeAutoCheckUpdate())`,
 	} {
-		if strings.Contains(html, unwanted) {
-			t.Fatalf("app update modal should be minimal but contains %q", unwanted)
+		if strings.Contains(string(modalContent), unwanted) || strings.Contains(string(appContent), unwanted) {
+			t.Fatalf("version notification should not contain %q", unwanted)
 		}
 	}
 }

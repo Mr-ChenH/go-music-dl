@@ -727,6 +727,42 @@ func TestDeleteLocalMusicHardDeletesAndKeepsCollectionEntries(t *testing.T) {
 	}
 }
 
+// 删除本地音乐时，去重记录必须一起清掉，否则再下载会被判成「已下载」而跳过。
+func TestDeleteLocalMusicClearsDownloadDedupEntry(t *testing.T) {
+	initCollectionDBForTest(t)
+
+	downloadDir := t.TempDir()
+	withLocalMusicDownloadDir(t, downloadDir)
+
+	const relPath = "Removed Track.mp3"
+	if err := os.WriteFile(filepath.Join(downloadDir, relPath), []byte("audio"), 0644); err != nil {
+		t.Fatalf("write local audio: %v", err)
+	}
+	localID := encodeLocalMusicID(relPath)
+
+	if err := core.SaveDownloadDedupEntry("Removed Track", "Some Artist", relPath); err != nil {
+		t.Fatalf("seed dedup entry: %v", err)
+	}
+	t.Cleanup(func() { _ = core.ForgetDownloadedSong("Removed Track", "Some Artist", relPath) })
+
+	router := newLocalMusicTestRouter()
+	req := httptest.NewRequest(http.MethodDelete, RoutePrefix+"/local_music?id="+url.QueryEscape(localID), nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("DELETE /local_music status = %d, want %d, body=%s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+
+	index, err := core.LoadDownloadDedupSet()
+	if err != nil {
+		t.Fatalf("LoadDownloadDedupSet: %v", err)
+	}
+	if core.IsSongDownloaded(&model.Song{Name: "Removed Track", Artist: "Some Artist"}, index) {
+		t.Fatal("删除本地音乐后去重记录必须一起清掉，否则再下载会被跳过")
+	}
+}
+
 func TestAutoCacheEndpointRequiresSameOrigin(t *testing.T) {
 	body, err := json.Marshal(map[string]string{"id": "song-1", "source": "qq"})
 	if err != nil {

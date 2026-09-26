@@ -1086,6 +1086,9 @@ func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 		if saveLocal {
 			// 加载 SQLite 去重集合。
 			allSongsSet, _ := core.LoadDownloadDedupSet()
+			// 旧记录只存了歌名+歌手、没有文件路径，先用本地曲库索引反查一次：
+			// 文件已经被删掉（比如在 NAS 后台直接删）就回收记录，让这次下载正常进行。
+			resolveLegacyDedupForSong(allSongsSet, tempSong)
 
 			result, err := core.DownloadWithDedupCheckWithTemplate(tempSong, settings.DownloadDir, embedMeta, embedMeta, settings.DownloadFilenameTemplate, allSongsSet)
 			if err != nil {
@@ -1498,7 +1501,7 @@ func RegisterMusicRoutes(api, configAPI *gin.RouterGroup) {
 		skipCount := 0
 		for _, s := range req.Songs {
 			song := &model.Song{Name: s.Name, Artist: s.Artist}
-			if core.IsSongDownloaded(song, dedupSet) {
+			if core.IsSongStillDownloaded(song, dedupSet, core.GetWebSettings().DownloadDir) {
 				skipCount++
 			}
 		}

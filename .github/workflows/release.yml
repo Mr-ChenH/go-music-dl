@@ -436,6 +436,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The action's default still includes the removed legacy "tools" package.
+          packages: platform-tools
 
       - name: Resolve Android SDK Paths
         shell: cmd

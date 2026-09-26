@@ -319,7 +319,7 @@ func RegisterLocalMusicRoutes(api *gin.RouterGroup) {
 			return
 		}
 		upsertLocalMusicIndexRow(track)
-		if err := core.SaveDownloadDedupEntry(track.Name, track.Artist); err != nil {
+		if err := core.SaveDownloadDedupEntry(track.Name, track.Artist, track.RelPath); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "音乐文件已保存，但曲库索引写入失败: " + err.Error()})
 			return
 		}
@@ -1749,6 +1749,8 @@ func deleteLocalMusicTrack(id string) error {
 		return err
 	}
 	deleteLocalMusicIndexRow(track.ID)
+	// 同步清掉去重记录，否则这首歌再下载时会因为记录残留被判成「已下载」而跳过。
+	_ = core.ForgetDownloadedSong(track.Name, track.Artist, track.RelPath)
 	invalidateLocalMusicScanCache()
 	return nil
 }
