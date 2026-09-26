@@ -1,6 +1,6 @@
 services:
   music-dl:
-    image: guohuiyuan/go-music-dl:latest
+    image: ghcr.io/mr-chenh/go-music-dl:latest
     container_name: music-dl
     restart: unless-stopped
     ports:

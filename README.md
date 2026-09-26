@@ -289,7 +289,7 @@ docker compose down
 
 **说明：**
 
-* 自动拉取 `guohuiyuan/go-music-dl:latest` 镜像
+* 自动拉取 `ghcr.io/mr-chenh/go-music-dl:latest` 镜像
 * 支持后台运行和自动重启
 * 默认使用 `./data` 本地目录做数据持久化，便于直接查看和备份
 * 设置时区为亚洲上海
@@ -316,11 +316,11 @@ docker run -d --name music-dl \
   -e TZ=Asia/Shanghai \
   --user 1000:1000 \
   --restart unless-stopped \
-  guohuiyuan/go-music-dl:latest \
+  ghcr.io/mr-chenh/go-music-dl:latest \
   ./music-dl web --port 8080 --no-browser
 
 # Windows PowerShell
-docker run -d --name music-dl -p 8080:8080 -v ${PWD}/data:/home/appuser/data -e TZ=Asia/Shanghai --user 1000:1000 --restart unless-stopped guohuiyuan/go-music-dl:latest ./music-dl web --port 8080 --no-browser
+docker run -d --name music-dl -p 8080:8080 -v ${PWD}/data:/home/appuser/data -e TZ=Asia/Shanghai --user 1000:1000 --restart unless-stopped ghcr.io/mr-chenh/go-music-dl:latest ./music-dl web --port 8080 --no-browser
 
 ```
 
@@ -364,7 +364,13 @@ TUI 常用按键：
 
 ## GitHub Actions 自动构建
 
-本项目已配置 GitHub Actions 工作流。当推送代码并打上版本标签（如 `v1.0.0`）时，会自动触发 `.github/workflows/docker.yml`，构建跨平台镜像（支持 amd64 和 arm64）并推送到 DockerHub。
+本项目已配置 GitHub Actions 工作流。推送到 `main`、推送 `v*` 版本标签或手动运行 `.github/workflows/docker.yml` 时，会构建 `linux/amd64` 和 `linux/arm64` 镜像并发布到 GitHub Container Registry：
+
+```text
+ghcr.io/mr-chenh/go-music-dl:latest
+```
+
+`main` 同时生成 `sha-<commit>` 标签，版本标签会生成完整版本号及主次版本标签。工作流使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需配置 Docker Hub 密钥。
 
 ### Android APK 构建
 
@@ -480,14 +486,12 @@ IOS_UNSIGNED_ONLY=1 ./package_ios.sh
 
 > 注意：`music-dl-ios-unsigned.ipa` 不是可直接安装包，需要用户用自己的证书和 provisioning profile 重签。如果需要 GitHub Actions 自动发布已签名 iOS 包，需要配置 `IOS_PROVISION_PROFILE_BASE64`、`IOS_CERTIFICATE_P12_BASE64` 和 `IOS_CERTIFICATE_PASSWORD`。
 
-**如果你 Fork 了本仓库并希望使用自己的构建流：**
+**如果你 Fork 了本仓库并希望发布到自己的 GHCR：**
 
-1. 在你的仓库 **Settings** -> **Secrets and variables** -> **Actions** 中添加：
-
-* `DOCKERHUB_USERNAME`: 你的 DockerHub 用户名
-* `DOCKERHUB_TOKEN`: 你的 DockerHub 访问令牌
-
-2. 将 `docker-compose.yml` 中的镜像地址修改为你自己的：`image: 你的用户名/go-music-dl:latest`
+1. 在仓库 **Settings** -> **Actions** -> **General** 中确认 Workflow permissions 允许工作流写入 Packages。
+2. 工作流使用 `${{ github.repository }}` 自动生成镜像名称，无需配置额外 Secret。
+3. 将 `docker-compose.yml` 中的镜像地址改为 `ghcr.io/<你的 GitHub 用户名>/go-music-dl:latest`。
+4. 首次发布后可在仓库 Packages 页面调整镜像可见性。
 
 ## Web 换源说明
 
